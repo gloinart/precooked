@@ -1,26 +1,18 @@
 #pragma once
-
 /////////////////////////////////////////////
 //
 // License : MIT
 // http://opensource.org/licenses/MIT
 //
 
-namespace std { template <typename T> class optional; }
-namespace std::filesystem { class path; }
 
-#include <string>
-#include <string_view>
-#include <vector>
-
+// Configuration
 #define PRECOOKED_NO_LIB
-
 #ifdef PRECOOKED_NO_LIB
 	#define PRECOOKED_INLINE inline
 #else
 	#define PRECOOKED_INLINE
 #endif
-
 
 #ifndef PRECOOKED_ASSERT
 	#ifdef NDEBUG
@@ -31,12 +23,16 @@ namespace std::filesystem { class path; }
 	#endif
 #endif
 
+// Includes
+#include <string>
+#include <string_view>
+#include <vector>
+namespace std { template <typename T> class optional; }
+namespace std::filesystem { class path; }
 namespace pre::detail { class byte_view; }
 
 
 namespace pre {
-
-
 
 // String case insesitive
 [[nodiscard]] PRECOOKED_INLINE auto to_lower(std::string str) noexcept -> std::string;
@@ -63,6 +59,14 @@ constexpr auto default_trimchars = std::string_view{"\t\r\t\n "};
 [[nodiscard]] PRECOOKED_INLINE auto replace_all_ignore_case(std::string_view str, std::string_view src, std::string_view dst)->std::string;
 [[nodiscard]] PRECOOKED_INLINE auto replace_all_ignore_case(const char* str, std::string_view src, std::string_view dst)->std::string; // Avoid ambiguity between std::string and std::string_view conversion
 
+// String - remove
+[[nodiscard]] PRECOOKED_INLINE auto remove_all(std::string str, std::string_view src) noexcept ->std::string;
+[[nodiscard]] PRECOOKED_INLINE auto remove_all(std::string_view str, std::string_view src)->std::string;
+[[nodiscard]] PRECOOKED_INLINE auto remove_all(const char* str, std::string_view src)->std::string; // Avoid ambiguity between std::string and std::string_view conversion
+[[nodiscard]] PRECOOKED_INLINE auto remove_all_ignore_case(std::string str, std::string_view src) noexcept->std::string;
+[[nodiscard]] PRECOOKED_INLINE auto remove_all_ignore_case(std::string_view str, std::string_view src)->std::string;
+[[nodiscard]] PRECOOKED_INLINE auto remove_all_ignore_case(const char* str, std::string_view src)->std::string; // Avoid ambiguity between std::string and std::string_view conversion
+
 // String - split
 [[nodiscard]] PRECOOKED_INLINE auto split_string(std::string_view str, const std::string_view delimiters) -> std::vector<std::string>;
 [[nodiscard]] PRECOOKED_INLINE auto split_string_to_sv(std::string_view str, const std::string_view delimiters) -> std::vector<std::string_view>;
@@ -71,10 +75,13 @@ constexpr auto default_trimchars = std::string_view{"\t\r\t\n "};
 
 // String - join
 template <typename Range>
-[[nodiscard]] PRECOOKED_INLINE auto join_strings(const Range& strings, const std::string_view delimiter)-> std::string;
+[[nodiscard]] auto join_strings(const Range& strings, const std::string_view delimiter)-> std::string;
+template <typename Range>
+[[nodiscard]] auto join_strings(const Range& strings)->std::string;
 
 // String conversion
 template <typename T> [[nodiscard]] auto string_to_number(std::string_view str) noexcept -> std::optional<T>;
+template <typename T> [[nodiscard]] auto number_to_string(const T& number) -> std::string; // Just here for consistency, uses std::to_string
 template <typename T> [[nodiscard]] auto to_string(const T& val)->std::string;
 
 	
@@ -101,13 +108,13 @@ template <typename Tpl, typename Func, size_t Idx = 0>
 auto tuple_for_each(Tpl& tpl, Func&& func) -> void;
 template <typename Tpl, typename Func, size_t Idx = 0>
 [[nodiscard]] auto tuple_any_of(const Tpl& tpl, const Func& func) -> bool;
+template <typename DstType, typename SrcType>
+[[nodiscard]] auto cast(const SrcType& src_type)->DstType;
 
-// Type info
+// Type names
 template <typename T> [[nodiscard]] auto type_name()->std::string;
 template <typename T> [[nodiscard]] auto type_name(T&&)->std::string;
 template <typename T> [[nodiscard]] auto held_type_name(const T& value)->std::string;
-
-
 
 }
 
@@ -275,6 +282,15 @@ public:
 		std::move(path) } 
 	{}
 };
+
+class bad_cast_exception : public std::bad_cast {
+public:
+	bad_cast_exception(std::string msg) : msg_{ std::move(msg) } {}
+	[[nodiscard]] auto what() const noexcept -> const char* { return msg_.c_str(); }
+private:
+	std::string msg_{};
+};
+
 }
 
 namespace pre::detail {
@@ -283,12 +299,12 @@ class throw_on_failure {
 public:
 	throw_on_failure(const bool condition) : condition_{ condition } {}
 	template<typename Exception, typename ...Ts>
-	auto exception_type(const std::filesystem::path& path, Ts ... ts) const&& -> void {
+	auto exception_type(Ts... ts) const&& -> void {
 		if (condition_) {
 			return;
 		}
 		static_assert(std::is_base_of_v<std::exception, Exception>);
-		throw Exception{ path, ts...};
+		throw Exception{ ts...};
 	}
 private:
 	bool condition_{};
@@ -377,7 +393,16 @@ auto pre::tuple_any_of(const Tpl& tpl, const Func& func) -> bool {
 	return false;
 }
 
-
+template <typename DstType, typename SrcType>
+auto pre::cast(const SrcType& src)->DstType {
+	const auto casted = static_cast<DstType>(src);
+	const auto casted_back = static_cast<SrcType>(casted);
+	detail::throw_on_failure(casted_back != src)
+		.exception_type <detail::exceptions::bad_cast_exception>(
+			std::string{ "bad cast from " } + type_name(src) + " to " + type_name(casted)
+		);
+	return casted;
+}
 
 
 
@@ -448,6 +473,12 @@ auto pre::string_to_number(const std::string_view str) noexcept -> std::optional
 		result.ptr != ptr_end ? std::optional<T>{} :
 		value;
 }
+
+template <typename T> 
+auto pre::number_to_string(const T& number) -> std::string {
+	return std::to_string(number);
+}
+
 
 
 #include <string>
@@ -617,7 +648,7 @@ auto pre::read_file_to_vector(const std::filesystem::path& filepath) -> std::vec
 #include <numeric>
 
 template <typename Range>
-[[nodiscard]] auto pre::join_strings(const Range& strings, const std::string_view delimiter)->std::string {
+auto pre::join_strings(const Range& strings, const std::string_view delimiter)->std::string {
 	if (strings.empty()) {
 		return {};
 	}
@@ -644,6 +675,11 @@ template <typename Range>
 	}
 	PRECOOKED_ASSERT(joined.size() == target_size);
 	return joined;
+}
+
+template <typename Range>
+auto pre::join_strings(const Range& strings)->std::string {
+	return join_strings(strings, std::string_view{});
 }
 
 
@@ -722,23 +758,11 @@ template <typename Range>
 
 
 
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
 
 
-
-///////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////
 #include <algorithm>
 
 
@@ -1004,6 +1028,62 @@ auto pre::replace_all_ignore_case(const std::string_view str, const std::string_
 auto pre::replace_all_ignore_case(const char* str, const std::string_view key, const std::string_view dst) -> std::string {
 	return replace_all_ignore_case(std::string_view{ str }, key, dst);
 }
+
+
+
+
+
+
+
+
+
+
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+
+
+
+
+
+
+
+// String - remove
+auto pre::remove_all(std::string str, std::string_view src) noexcept ->std::string {
+	return str.empty() || src.empty() ?
+		std::string{}:
+		detail::impl_replace_all_shrink_string(std::move(str), src, std::string_view{}, detail::find_case_sensitive);
+}
+auto pre::remove_all(std::string_view str, std::string_view src)->std::string {
+	return str.empty() || src.empty() ?
+		std::string{} : 
+		detail::impl_replace_all_rebuild_string(std::move(str), src, std::string_view{}, detail::find_case_sensitive);
+}
+auto pre::remove_all(const char* str, std::string_view src)->std::string {
+	return remove_all(std::string_view(str), src);
+
+}
+auto pre::remove_all_ignore_case(std::string str, std::string_view src) noexcept->std::string {
+	return str.empty() || src.empty() ?
+		std::string{} : 
+		detail::impl_replace_all_shrink_string(std::move(str), src, std::string_view{}, detail::find_ignore_case);
+}
+auto pre::remove_all_ignore_case(std::string_view str, std::string_view src)->std::string {
+	return str.empty() || src.empty() ?
+		std::string{} : 
+		detail::impl_replace_all_rebuild_string(std::move(str), src, std::string_view{}, detail::find_ignore_case);
+}
+auto pre::remove_all_ignore_case(const char* str, std::string_view src)->std::string {
+	return remove_all_ignore_case(std::string_view(str), src);
+}
+
+
+
+
+
+
+
+
 
 
 
