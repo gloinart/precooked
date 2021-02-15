@@ -293,24 +293,6 @@ private:
 
 }
 
-namespace pre::detail {
-// throw_on_failure is utilized to get the expression on the left in condition statements
-class throw_on_failure {
-public:
-	throw_on_failure(const bool condition) : condition_{ condition } {}
-	template<typename Exception, typename ...Ts>
-	auto exception_type(Ts... ts) const&& -> void {
-		if (condition_) {
-			return;
-		}
-		static_assert(std::is_base_of_v<std::exception, Exception>);
-		throw Exception{ ts...};
-	}
-private:
-	bool condition_{};
-};
-}
-
 
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
@@ -397,10 +379,11 @@ template <typename DstType, typename SrcType>
 auto pre::cast(const SrcType& src)->DstType {
 	const auto casted = static_cast<DstType>(src);
 	const auto casted_back = static_cast<SrcType>(casted);
-	detail::throw_on_failure(casted_back != src)
-		.exception_type <detail::exceptions::bad_cast_exception>(
+	if (casted_back != src) {
+		throw detail::exceptions::bad_cast_exception{
 			std::string{ "bad cast from " } + type_name(src) + " to " + type_name(casted)
-		);
+		};
+	}
 	return casted;
 }
 
@@ -592,23 +575,28 @@ namespace pre::detail {
 
 template <typename Container>
 [[nodiscard]] auto impl_read_file_to_container(const std::filesystem::path& filepath) -> Container {
-	detail::throw_on_failure(std::filesystem::exists(filepath))
-		.exception_type<detail::exceptions::file_not_found_exception>(filepath);
-	detail::throw_on_failure(std::filesystem::is_regular_file(filepath) )
-		.exception_type<detail::exceptions::is_not_file_exception>(filepath);
+	if (!std::filesystem::exists(filepath)) {
+		throw detail::exceptions::file_not_found_exception(filepath);
+	}
+	if (!std::filesystem::is_regular_file(filepath)) {
+		throw detail::exceptions::is_not_file_exception(filepath);
+	}
 	using value_t = typename Container::value_type;
 	using byte_t = byte_view::byte_t;
 	const auto file_size_uintmax = std::filesystem::file_size(filepath);
 	const auto file_size_optional = detail::filesize_to_size_t(file_size_uintmax);
-	detail::throw_on_failure(file_size_optional.has_value()).
-		exception_type<detail::exceptions::file_too_large_exception>(filepath, file_size_uintmax);
+	if (!file_size_optional.has_value()) {
+		throw detail::exceptions::file_too_large_exception(filepath, file_size_uintmax);
+	}
 	const auto file_size = *file_size_optional;
 	const auto element_size = sizeof(value_t);
-	detail::throw_on_failure((file_size % element_size) == 0)
-		.exception_type<detail::exceptions::filesize_not_compatible_with_typesize_exception>(filepath, file_size, element_size, type_name<value_t>());
+	if (!(file_size % element_size) == 0) {
+		throw detail::exceptions::filesize_not_compatible_with_typesize_exception(filepath, file_size, element_size, type_name<value_t>());
+	}
 	auto file_stream = std::ifstream{ filepath, std::ios::binary };
-	detail::throw_on_failure(file_stream.is_open())
-		.exception_type< detail::exceptions::read_file_exception>(filepath);
+	if (!file_stream.is_open()) {
+		throw detail::exceptions::read_file_exception(filepath);
+	}
 	const auto scope_exit = detail::scope_exit{ [&file_stream]() {
 		file_stream.close();
 	} };
@@ -1215,14 +1203,17 @@ auto pre::write_bytevector_to_file(const detail::byte_view& byteview, const std:
 		if (!std::filesystem::exists(dir)) {
 			std::filesystem::create_directories(dir);
 		}
-		detail::throw_on_failure(std::filesystem::exists(dir))
-			.exception_type<detail::exceptions::dir_not_found_exception>(dir);
-		detail::throw_on_failure(std::filesystem::is_directory(dir))
-			.exception_type<detail::exceptions::is_not_directory_exception>(dir);
+		if (!std::filesystem::exists(dir)) {
+			throw detail::exceptions::dir_not_found_exception(dir);
+		}
+		if (!std::filesystem::is_directory(dir)) {
+			throw detail::exceptions::is_not_directory_exception(dir);
+		}
 	}
 	auto file_stream = std::ofstream{ filepath, std::ios::binary };
-	detail::throw_on_failure(file_stream.is_open())
-		.exception_type<detail::exceptions::write_file_exception>(filepath);
+	if (!file_stream.is_open()) {
+		throw detail::exceptions::write_file_exception(filepath);
+	}
 	const auto scope_exit = detail::scope_exit{ [&file_stream]() {
 		file_stream.close();
 	} };
@@ -1246,16 +1237,18 @@ auto pre::is_vector_equal_to_file_content(
 	using byte_t = detail::byte_view::byte_t;
 	const auto file_size_uintmax = std::filesystem::file_size(filepath);
 	const auto file_size_optional = detail::filesize_to_size_t(file_size_uintmax);
-	detail::throw_on_failure(file_size_optional.has_value()).
-		exception_type<detail::exceptions::file_too_large_exception>(filepath, file_size_uintmax);
+	if (!file_size_optional.has_value()) {
+		throw detail::exceptions::file_too_large_exception(filepath, file_size_uintmax);
+	}
 	const auto file_size = *file_size_optional;
 	if (file_size != byteview.size()) {
 		return false;
 	}
 	auto buffer = std::vector<detail::byte_view::byte_t>{};
 	auto file_stream = std::ifstream{ filepath, std::ios::binary };
-	detail::throw_on_failure(file_stream.is_open())
-		.exception_type<detail::exceptions::read_file_exception>(filepath);
+	if (!file_stream.is_open()) {
+		throw detail::exceptions::read_file_exception(filepath);
+	}
 	const auto scope_exit = detail::scope_exit{ [&file_stream]() {
 		file_stream.close();
 	} };
@@ -1313,18 +1306,22 @@ template <typename Pred>
 
 
 auto pre::files_in_directory(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {
-	detail::throw_on_failure(std::filesystem::exists(dir))
-		.exception_type<detail::exceptions::dir_not_found_exception > ( dir );
-	detail::throw_on_failure(std::filesystem::is_directory(dir))
-		.exception_type<detail::exceptions::is_not_directory_exception > ( dir );
+	if (!std::filesystem::exists(dir)) {
+		throw detail::exceptions::dir_not_found_exception(dir);
+	}
+	if (!std::filesystem::is_directory(dir)) {
+		throw detail::exceptions::is_not_directory_exception(dir);
+	}
 	return detail::impl_scan_flat(dir, [](auto&& p) { return std::filesystem::is_regular_file(p); });
 }
 
 auto pre::subdirs_in_directory(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {
-	detail::throw_on_failure(std::filesystem::exists(dir))
-		.exception_type<detail::exceptions::dir_not_found_exception>( dir);
-	detail::throw_on_failure(std::filesystem::is_directory(dir))
-		.exception_type<detail::exceptions::is_not_directory_exception>(dir);
+	if (!std::filesystem::exists(dir)) {
+		throw detail::exceptions::dir_not_found_exception(dir);
+	}
+	if (!std::filesystem::is_directory(dir)) {
+		throw detail::exceptions::is_not_directory_exception(dir);
+	}
 	return detail::impl_scan_flat(dir, [](auto&& p) { return std::filesystem::is_directory(p); });
 }
 
@@ -1350,17 +1347,21 @@ template <typename Pred>
 
 
 auto pre::files_in_directory_tree(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {
-	detail::throw_on_failure(std::filesystem::exists(dir))
-		.exception_type<detail::exceptions::dir_not_found_exception>(dir);
-	detail::throw_on_failure(std::filesystem::is_directory(dir))
-		.exception_type< detail::exceptions::is_not_directory_exception>(dir);
+	if (!std::filesystem::exists(dir)) {
+		throw detail::exceptions::dir_not_found_exception(dir);
+	}
+	if (!std::filesystem::is_directory(dir)) {
+		throw detail::exceptions::is_not_directory_exception(dir);
+	}
 	return detail::impl_scan_tree(dir, [](auto&& p) { return std::filesystem::is_regular_file(p); });
 }
 
 auto pre::subdirs_in_directory_tree(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {
-	detail::throw_on_failure(std::filesystem::exists(dir))
-		.exception_type<detail::exceptions::dir_not_found_exception>(dir);
-	detail::throw_on_failure(std::filesystem::is_directory(dir))
-		.exception_type< detail::exceptions::is_not_directory_exception>(dir);
+	if (!std::filesystem::exists(dir)) {
+		throw detail::exceptions::dir_not_found_exception(dir);
+	}
+	if (!std::filesystem::is_directory(dir)) {
+		throw detail::exceptions::is_not_directory_exception(dir);
+	}
 	return detail::impl_scan_tree(dir, [](auto&& p) { return std::filesystem::is_directory(p); });
 }
