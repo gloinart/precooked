@@ -1,6 +1,5 @@
 // Basic.cpp : This file contains the 'main' function. Program execution begins and ends there.
 //
-#include "pch.h"
 #include "precooked.hpp"
 #include <iostream>
 #include <map>
@@ -22,17 +21,32 @@
 
 
 
+
+namespace {
+	auto run_precooked_tests()->std::vector<std::string>;
+}
+
 struct dummy_t {
 };
 
-struct derived_t : dummy_t {
 
-};
+int main() {
+	auto sz = run_precooked_tests().size();
+	return sz != 0;
+}
 
-int main()
-{
-	
 
+
+
+
+
+
+
+
+namespace {
+
+
+auto run_precooked_tests()->std::vector<std::string> {
 
 	{
 		namespace fs = std::filesystem;
@@ -56,10 +70,10 @@ int main()
 	}
 
 
-	
-	
 
-	// Tuple
+
+
+	// tuple_any_of, tuple_for_each
 	{
 		ASSERT_EQ(
 			true,
@@ -83,7 +97,18 @@ int main()
 
 	}
 
-	// String splitting
+
+
+
+	///////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////
+
+
+
+
+
+	// split_string_to_sv
 	{
 		const auto strs = std::vector<std::string>{
 			"a b c",
@@ -100,7 +125,7 @@ int main()
 			ASSERT_EQ(splitted_sv[1], "b");
 			ASSERT_EQ(splitted_sv[2], "c");
 			ASSERT_EQ(
-				pre::split_string(str, " "), 
+				pre::split_string(str, " "),
 				(std::vector<std::string>{"a", "b", "c"})
 			);
 		}
@@ -127,8 +152,24 @@ int main()
 				std::vector<std::string_view>{"abc"}
 			);
 		}
-
 	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+	///////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////
+
 
 	// String trim
 	{
@@ -172,6 +213,20 @@ int main()
 		}
 	}
 
+
+
+
+
+
+
+
+	///////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////
+
+
+
+
 	// String to number
 	{
 		ASSERT_EQ(pre::string_to_number<int>("1234"), 1234);
@@ -195,6 +250,10 @@ int main()
 	}
 
 
+
+
+
+	// find_ignore_case
 	{
 		using namespace std::string_view_literals;
 		const auto str = "aa01234abc"sv;
@@ -220,11 +279,11 @@ int main()
 	}
 
 
+
+	// to_upper to_lower
 	{
 		using namespace std::string_literals;
 		ASSERT_EQ(pre::to_upper(std::string_view{ "abc" }), "ABC");
-
-
 	}
 
 	// To string
@@ -234,7 +293,7 @@ int main()
 		ASSERT_EQ(pre::to_string(false), "false");
 	}
 
-	// String replace
+	// replace_all
 	{
 		using namespace std::string_literals;
 		ASSERT_EQ(
@@ -271,8 +330,48 @@ int main()
 			pre::replace_all(" aa bbb aa "s, "aa", "bb"),
 			" bb bbb bb "
 		);
-
 	}
+
+
+	// replace_all_ignore_case
+	{
+		using namespace std::string_literals;
+		ASSERT_EQ(
+			pre::replace_all_ignore_case("abcabcb"s, "b", "dd"),
+			"addcaddcdd"
+		);
+
+		ASSERT_EQ(
+			pre::replace_all_ignore_case("abcabcb"s, "b", ""),
+			"acac"
+		);
+
+		ASSERT_EQ(
+			pre::replace_all_ignore_case("aa bbb aa"s, "aa", "xxxx"),
+			"xxxx bbb xxxx"
+		);
+
+		ASSERT_EQ(
+			pre::replace_all_ignore_case("aa bbb aa"s, "aa", "x"),
+			"x bbb x"
+		);
+
+		ASSERT_EQ(
+			pre::replace_all_ignore_case("aa bbb aa"s, "bbb", ""),
+			"aa  aa"
+		);
+
+		ASSERT_EQ(
+			pre::replace_all_ignore_case(" aa bbb aa "s, "aa", "xxxx"),
+			" xxxx bbb xxxx "
+		);
+
+		ASSERT_EQ(
+			pre::replace_all_ignore_case(" aa bbb aa "s, "aa", "bb"),
+			" bb bbb bb "
+		);
+	}
+
 
 
 	{
@@ -314,7 +413,7 @@ int main()
 		);
 	}
 
-
+	// join_strings
 	{
 		using namespace std::string_view_literals;
 		ASSERT_EQ(
@@ -387,30 +486,21 @@ int main()
 
 
 
-	if(false){
-		auto dir = std::filesystem::path{ "c:\\Users\\vikse\\Dropbox" };
-		ASSERT_EQ(true, std::filesystem::is_directory(dir));
-		auto files = std::vector<std::filesystem::path>{};
-		try {
-			files = pre::files_in_directory_tree(dir);
-		}
-		catch (std::exception e) {
-			std::cout << e.what();
-		}
-		size_t bytes = 0;
-		for (auto&& file : files) {
-			try {
-				auto bv = pre::read_file_to_vector<char>(file);
-				std::cout << file << " " << bv.size() << std::endl;
-				bytes += bv.size();
-			}
-			catch (...) {
-				std::cout << "failure" << std::endl;
-			}
-		}
-		std::cout << bytes << std::endl;
+	{
+		const auto temp_dir = std::filesystem::temp_directory_path();
+		const auto floats = std::vector<float>{ 0.0f, 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
+		pre::write_bytevector_to_file(floats, temp_dir / "floats.bin");
+		const auto back = pre::read_file_to_vector<float>(temp_dir / "floats.bin");
+		ASSERT_EQ(floats, back);
+
+
+
 	}
 
+
+	return {};
+
+}
 
 
 
