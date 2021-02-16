@@ -70,6 +70,14 @@ TEST_CASE("tuple"){
 
 // String splitting
 TEST_CASE("split_string"){
+
+	REQUIRE(
+		prc::split_string("", "").empty()
+	);
+	REQUIRE(
+		prc::split_string("xxxyxyxy", "xy").empty()
+	);
+
 	const auto strs = std::vector<std::string>{
 		"a b c",
 		"   a b c",

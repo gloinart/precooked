@@ -770,14 +770,40 @@ auto prc::detail::filesize_to_size_t(
 
 
 namespace prc::detail {
+
 template <typename PartType>
 [[nodiscard]] auto impl_split_string(
 	const std::string_view str,
 	const std::string_view delimiters
 ) -> std::vector<PartType> {
+	if (str.empty()) {
+		return {};
+	}
+	if (delimiters.empty()) {
+		return std::vector<PartType>{ PartType{ str } };
+	}
+	const auto first_not_delimiter = str.find_first_not_of(delimiters);
+	if (first_not_delimiter >= str.size()) {
+		return {};
+	}
+	// Calculate num parts in order to allocated vector
+	const auto last_not_delimiter = str.find_last_not_of(delimiters);
+	auto num_parts = size_t{ 1 };
+	for (size_t i = first_not_delimiter + 1; i < last_not_delimiter; ++i) {
+		PRECOOKED_ASSERT(0 < i);
+		PRECOOKED_ASSERT(i < str.size());
+		const auto is_new_part =
+			delimiters.find(str[i - 1]) == std::string::npos && 
+			delimiters.find(str[i]) != std::string::npos;
+		if (is_new_part) {
+			++num_parts;
+		}
+	}
+	// Split string
 	auto parts = std::vector<PartType>{};
+	parts.reserve(num_parts);
 	for (
-		auto left = str.find_first_not_of(delimiters), right = size_t{ 0 };
+		auto left = first_not_delimiter, right = size_t{ 0 };
 		left != std::string_view::npos;
 		left = str.find_first_not_of(delimiters, right)
 	) {
@@ -787,6 +813,7 @@ template <typename PartType>
 		PRECOOKED_ASSERT(left <= right);
 		parts.emplace_back(PartType{ str.data() + left, right - left });
 	}
+	PRECOOKED_ASSERT(parts.size() == num_parts);
 	return parts;
 }
 }
