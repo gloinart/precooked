@@ -29,10 +29,10 @@
 #include <vector>
 namespace std { template <typename T> class optional; }
 namespace std::filesystem { class path; }
-namespace pre::detail { class byte_view; }
+namespace prc::detail { class byte_view; }
 
 
-namespace pre {
+namespace prc {
 
 // String case insesitive
 [[nodiscard]] PRECOOKED_INLINE auto to_lower(std::string str) noexcept -> std::string;
@@ -161,7 +161,7 @@ template <typename T> [[nodiscard]] auto held_type_name(const T& value)->std::st
 #include <type_traits>
 
 
-class pre::detail::byte_view {
+class prc::detail::byte_view {
 public:
 	using byte_t = char;
 	template <
@@ -195,7 +195,7 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
 
-namespace pre::detail {
+namespace prc::detail {
 template <typename F>
 class scope_exit {
 public:
@@ -220,7 +220,7 @@ private:
 #include <filesystem>
 
 
-namespace pre::detail::exceptions {
+namespace prc::detail::exceptions {
 
 class io_exception : public std::runtime_error {
 	using inherited = std::runtime_error;
@@ -305,7 +305,7 @@ private:
 #include <memory>
 #include <tuple>
 
-namespace pre::detail::introspection {
+namespace prc::detail::introspection {
 	// See http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2015/n4502.pdf.
 	template <typename...>
 	using void_t = void;
@@ -317,7 +317,7 @@ namespace pre::detail::introspection {
 	struct detect<T, Op, void_t<Op<T>>> : std::true_type {};
 }
 
-namespace pre::detail {
+namespace prc::detail {
 	template <typename T>
 	using is_container_t = decltype(std::declval<const T&>().begin(), std::declval<const T&>().end());
 
@@ -358,7 +358,7 @@ namespace pre::detail {
 #include <type_traits>
 
 template<typename Tpl, typename Func, size_t Idx>
-auto pre::tuple_for_each(Tpl& tpl, Func&& func) -> void {
+auto prc::tuple_for_each(Tpl& tpl, Func&& func) -> void {
 	if constexpr (Idx < std::tuple_size_v<Tpl>) {
 		std::invoke(func, std::get<Idx>(tpl));
 		tuple_for_each<Tpl, Func, Idx + 1>(tpl, std::forward<Func>(func));
@@ -366,7 +366,7 @@ auto pre::tuple_for_each(Tpl& tpl, Func&& func) -> void {
 }
 
 template <typename Tpl, typename Func, size_t Idx>
-auto pre::tuple_any_of(const Tpl& tpl, const Func& func) -> bool {
+auto prc::tuple_any_of(const Tpl& tpl, const Func& func) -> bool {
 	if constexpr (Idx < std::tuple_size_v<Tpl>) {
 		return std::invoke(func, std::get<Idx>(tpl)) ?
 			true :
@@ -376,7 +376,7 @@ auto pre::tuple_any_of(const Tpl& tpl, const Func& func) -> bool {
 }
 
 template <typename DstType, typename SrcType>
-auto pre::cast(const SrcType& src)->DstType {
+auto prc::cast(const SrcType& src)->DstType {
 	const auto casted = static_cast<DstType>(src);
 	const auto casted_back = static_cast<SrcType>(casted);
 	if (casted_back != src) {
@@ -401,9 +401,9 @@ auto pre::cast(const SrcType& src)->DstType {
 #include <string>
 
 template <typename T>
-auto pre::type_name() -> std::string { return typeid(T).name(); }
+auto prc::type_name() -> std::string { return typeid(T).name(); }
 template <typename T>
-auto pre::type_name(T&&) -> std::string { return typeid(T).name(); }
+auto prc::type_name(T&&) -> std::string { return typeid(T).name(); }
 
 
 
@@ -411,7 +411,7 @@ auto pre::type_name(T&&) -> std::string { return typeid(T).name(); }
 #include <variant>
 
 template <typename T>
-auto pre::held_type_name(const T& value) -> std::string {
+auto prc::held_type_name(const T& value) -> std::string {
 	using value_t = std::decay_t<T>;
 	if constexpr (std::is_same_v<decltype(detail::is_variant(value)), std::true_type>) {
 		if (value.valueless_by_exception()) {
@@ -446,7 +446,7 @@ auto pre::held_type_name(const T& value) -> std::string {
 #include <charconv>
 
 template <typename T>
-auto pre::string_to_number(const std::string_view str) noexcept -> std::optional<T> {
+auto prc::string_to_number(const std::string_view str) noexcept -> std::optional<T> {
 	static_assert(std::is_arithmetic_v<T>);
 	auto value = T{};
 	const auto* ptr_end = str.data() + str.size();
@@ -458,7 +458,7 @@ auto pre::string_to_number(const std::string_view str) noexcept -> std::optional
 }
 
 template <typename T> 
-auto pre::number_to_string(const T& number) -> std::string {
+auto prc::number_to_string(const T& number) -> std::string {
 	return std::to_string(number);
 }
 
@@ -470,7 +470,7 @@ auto pre::number_to_string(const T& number) -> std::string {
 #include <sstream>
 
 template <typename T>
-auto pre::to_string(const T& value) -> std::string {
+auto prc::to_string(const T& value) -> std::string {
 	using value_t = std::decay_t<T>;
 	if constexpr (std::is_same_v<std::string, value_t>) {
 		return value;
@@ -565,7 +565,7 @@ auto pre::to_string(const T& value) -> std::string {
 #include <cstdint>
 #include <optional>
 
-namespace pre::detail {
+namespace prc::detail {
 
 
 [[nodiscard]] PRECOOKED_INLINE auto filesize_to_size_t(
@@ -618,7 +618,7 @@ template <typename Container>
 
 
 template <typename T>
-auto pre::read_file_to_vector(const std::filesystem::path& filepath) -> std::vector<T> {
+auto prc::read_file_to_vector(const std::filesystem::path& filepath) -> std::vector<T> {
 	static_assert(std::is_arithmetic_v<T>);
 	return detail::impl_read_file_to_container<std::vector<T>>(filepath);
 }
@@ -636,11 +636,10 @@ auto pre::read_file_to_vector(const std::filesystem::path& filepath) -> std::vec
 #include <numeric>
 
 template <typename Range>
-auto pre::join_strings(const Range& strings, const std::string_view delimiter)->std::string {
+auto prc::join_strings(const Range& strings, const std::string_view delimiter)->std::string {
 	if (strings.empty()) {
 		return {};
 	}
-
 	const auto target_size = 
 		std::accumulate(strings.begin(), strings.end(), size_t{ 0 }, [](size_t sum, auto&& str) {
 			return sum + str.size();
@@ -666,7 +665,7 @@ auto pre::join_strings(const Range& strings, const std::string_view delimiter)->
 }
 
 template <typename Range>
-auto pre::join_strings(const Range& strings)->std::string {
+auto prc::join_strings(const Range& strings)->std::string {
 	return join_strings(strings, std::string_view{});
 }
 
@@ -754,7 +753,7 @@ auto pre::join_strings(const Range& strings)->std::string {
 #include <algorithm>
 
 
-auto pre::detail::filesize_to_size_t(
+auto prc::detail::filesize_to_size_t(
 	uintmax_t filesize_uintmax
 ) noexcept ->std::optional<size_t>{
 	const auto file_size = static_cast<size_t>(filesize_uintmax);
@@ -770,7 +769,7 @@ auto pre::detail::filesize_to_size_t(
 //////////////////////////////////////////////////////////////////////////////
 
 
-namespace pre::detail {
+namespace prc::detail {
 template <typename PartType>
 [[nodiscard]] auto impl_split_string(
 	const std::string_view str,
@@ -794,28 +793,28 @@ template <typename PartType>
 
 
 
-auto pre::split_string(
+auto prc::split_string(
 	const std::string_view str, 
 	const std::string_view delimiters
 ) -> std::vector<std::string> {
 	return detail::impl_split_string<std::string>(str, delimiters);
 }
 
-auto pre::split_string_to_sv(
+auto prc::split_string_to_sv(
 	const std::string_view str, 
 	const std::string_view delimiters
 ) -> std::vector<std::string_view> {
 	return detail::impl_split_string<std::string_view>(str, delimiters);
 }
 
-auto pre::split_string_to_lines(
+auto prc::split_string_to_lines(
 	const std::string_view str
 ) -> std::vector<std::string> {
 	using namespace std::string_view_literals;
 	return split_string(str, "\n\r"sv);
 }
 
-auto pre::trim_string(
+auto prc::trim_string(
 	std::string str, 
 	const std::string_view trim_chars
 ) noexcept -> std::string {
@@ -833,7 +832,7 @@ auto pre::trim_string(
 	return str;
 }
 
-auto pre::trim_string_to_sv(
+auto prc::trim_string_to_sv(
 	std::string_view str,
 	const std::string_view trim_chars
 ) noexcept -> std::string_view {
@@ -852,7 +851,7 @@ auto pre::trim_string_to_sv(
 }
 
 
-auto pre::is_trimmed(const std::string_view str, const std::string_view trim_chars) noexcept -> bool {
+auto prc::is_trimmed(const std::string_view str, const std::string_view trim_chars) noexcept -> bool {
 	return
 		str.empty() ? true :
 		trim_chars.find(str.front()) != std::string_view::npos ? false :
@@ -870,14 +869,14 @@ auto pre::is_trimmed(const std::string_view str, const std::string_view trim_cha
 
 
 
-namespace pre::detail {
+namespace prc::detail {
 
 
 constexpr auto find_case_sensitive = [](const std::string_view& str, const std::string_view& key, const size_t offset) noexcept -> size_t {
 	return str.find(key, offset);
 };
 constexpr auto find_ignore_case = [](const std::string_view& str, const std::string_view& key, const size_t offset) noexcept -> size_t {
-	return pre::find_ignore_case(str, key, offset);
+	return prc::find_ignore_case(str, key, offset);
 };
 
 PRECOOKED_INLINE auto replace_string_part(
@@ -979,7 +978,7 @@ template <typename FindFunc>
 }
 
 
-auto pre::replace_all(std::string str, const std::string_view key, const std::string_view dst) -> std::string {
+auto prc::replace_all(std::string str, const std::string_view key, const std::string_view dst) -> std::string {
 	// Pick implementation based on key/dst size
 	return
 		(str.empty() || key.empty()) ? str :
@@ -988,17 +987,17 @@ auto pre::replace_all(std::string str, const std::string_view key, const std::st
 		detail::impl_replace_all_rebuild_string(str, key, dst, detail::find_case_sensitive);
 }
 
-auto pre::replace_all(const std::string_view str, const std::string_view key, const std::string_view dst) -> std::string {
+auto prc::replace_all(const std::string_view str, const std::string_view key, const std::string_view dst) -> std::string {
 	return (str.empty() || key.empty()) ?
 		std::string{ str } :
 		detail::impl_replace_all_rebuild_string(str, key, dst, detail::find_case_sensitive);
 }
 
-auto pre::replace_all(const char* str, const std::string_view key, const std::string_view dst) -> std::string {
+auto prc::replace_all(const char* str, const std::string_view key, const std::string_view dst) -> std::string {
 	return replace_all(std::string_view{ str }, key, dst);
 }
 
-auto pre::replace_all_ignore_case(std::string str, const std::string_view key, const std::string_view dst) -> std::string {
+auto prc::replace_all_ignore_case(std::string str, const std::string_view key, const std::string_view dst) -> std::string {
 	// Pick implementation based on key/dst size
 	return
 		(str.empty() || key.empty()) ? str :
@@ -1007,13 +1006,13 @@ auto pre::replace_all_ignore_case(std::string str, const std::string_view key, c
 		detail::impl_replace_all_rebuild_string(str, key, dst, detail::find_ignore_case);
 }
 
-auto pre::replace_all_ignore_case(const std::string_view str, const std::string_view key, const std::string_view dst) -> std::string {
+auto prc::replace_all_ignore_case(const std::string_view str, const std::string_view key, const std::string_view dst) -> std::string {
 	return (str.empty() || key.empty()) ?
 		std::string{ str } :
 		detail::impl_replace_all_rebuild_string(str, key, dst, detail::find_ignore_case);
 }
 
-auto pre::replace_all_ignore_case(const char* str, const std::string_view key, const std::string_view dst) -> std::string {
+auto prc::replace_all_ignore_case(const char* str, const std::string_view key, const std::string_view dst) -> std::string {
 	return replace_all_ignore_case(std::string_view{ str }, key, dst);
 }
 
@@ -1037,31 +1036,31 @@ auto pre::replace_all_ignore_case(const char* str, const std::string_view key, c
 
 
 // String - remove
-auto pre::remove_all(std::string str, std::string_view src) noexcept ->std::string {
+auto prc::remove_all(std::string str, std::string_view src) noexcept ->std::string {
 	return str.empty() || src.empty() ?
 		std::string{}:
 		detail::impl_replace_all_shrink_string(std::move(str), src, std::string_view{}, detail::find_case_sensitive);
 }
-auto pre::remove_all(std::string_view str, std::string_view src)->std::string {
+auto prc::remove_all(std::string_view str, std::string_view src)->std::string {
 	return str.empty() || src.empty() ?
 		std::string{} : 
 		detail::impl_replace_all_rebuild_string(std::move(str), src, std::string_view{}, detail::find_case_sensitive);
 }
-auto pre::remove_all(const char* str, std::string_view src)->std::string {
+auto prc::remove_all(const char* str, std::string_view src)->std::string {
 	return remove_all(std::string_view(str), src);
 
 }
-auto pre::remove_all_ignore_case(std::string str, std::string_view src) noexcept->std::string {
+auto prc::remove_all_ignore_case(std::string str, std::string_view src) noexcept->std::string {
 	return str.empty() || src.empty() ?
 		std::string{} : 
 		detail::impl_replace_all_shrink_string(std::move(str), src, std::string_view{}, detail::find_ignore_case);
 }
-auto pre::remove_all_ignore_case(std::string_view str, std::string_view src)->std::string {
+auto prc::remove_all_ignore_case(std::string_view str, std::string_view src)->std::string {
 	return str.empty() || src.empty() ?
 		std::string{} : 
 		detail::impl_replace_all_rebuild_string(std::move(str), src, std::string_view{}, detail::find_ignore_case);
 }
-auto pre::remove_all_ignore_case(const char* str, std::string_view src)->std::string {
+auto prc::remove_all_ignore_case(const char* str, std::string_view src)->std::string {
 	return remove_all_ignore_case(std::string_view(str), src);
 }
 
@@ -1083,7 +1082,7 @@ auto pre::remove_all_ignore_case(const char* str, std::string_view src)->std::st
 #include <algorithm>
 #include <cctype>
 
-namespace pre::detail {
+namespace prc::detail {
 const auto is_chars_equal_ignore_case = [](unsigned char a, unsigned char b) noexcept {
 	return a == b || std::tolower(a) == std::tolower(b);
 };
@@ -1093,21 +1092,21 @@ const auto is_chars_equal_ignore_case = [](unsigned char a, unsigned char b) noe
 }
 }
 
-auto pre::to_lower(std::string str) noexcept -> std::string {
+auto prc::to_lower(std::string str) noexcept -> std::string {
 	std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
 		return std::tolower(c);
 	});
 	return str;
 }
 
-auto pre::to_upper(std::string str) noexcept -> std::string {
+auto prc::to_upper(std::string str) noexcept -> std::string {
 	std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
 		return std::toupper(c);
 	});
 	return str;
 }
 
-auto pre::to_lower(std::string_view sv) -> std::string {
+auto prc::to_lower(std::string_view sv) -> std::string {
 	auto str = std::string{};
 	str.reserve(sv.size());
 	std::transform(sv.begin(), sv.end(), std::back_inserter(str), [](unsigned char c) {
@@ -1116,7 +1115,7 @@ auto pre::to_lower(std::string_view sv) -> std::string {
 	return str;
 }
 
-auto pre::to_upper(std::string_view sv) -> std::string {
+auto prc::to_upper(std::string_view sv) -> std::string {
 	auto str = std::string{};
 	str.reserve(sv.size());
 	std::transform(sv.begin(), sv.end(), std::back_inserter(str), [](unsigned char c) {
@@ -1127,22 +1126,22 @@ auto pre::to_upper(std::string_view sv) -> std::string {
 
 
 
-auto pre::is_equal_ignore_case(const std::string_view a, const std::string_view b) noexcept -> bool {
+auto prc::is_equal_ignore_case(const std::string_view a, const std::string_view b) noexcept -> bool {
 	return
 		a.size() == b.size() &&
 		detail::impl_is_equal_ignore_case(a, b);
 }
 
-auto pre::contains_substring(const std::string_view haystack, const std::string_view needle) noexcept -> bool {
+auto prc::contains_substring(const std::string_view haystack, const std::string_view needle) noexcept -> bool {
 	return haystack.find(needle) != std::string::npos;
 }
 
-auto pre::contains_substring_ignore_case(const std::string_view haystack, const std::string_view needle) noexcept -> bool {
+auto prc::contains_substring_ignore_case(const std::string_view haystack, const std::string_view needle) noexcept -> bool {
 	return find_ignore_case(haystack, needle, 0) != std::string::npos;
 }
 
 
-[[nodiscard]] PRECOOKED_INLINE auto pre::find_ignore_case(
+[[nodiscard]] PRECOOKED_INLINE auto prc::find_ignore_case(
 	const std::string_view haystack, 
 	const std::string_view needle, 
 	const size_t offset
@@ -1191,13 +1190,13 @@ auto pre::contains_substring_ignore_case(const std::string_view haystack, const 
 
 
 // Read files
-auto pre::read_file_to_string(const std::filesystem::path& filepath) -> std::string {
+auto prc::read_file_to_string(const std::filesystem::path& filepath) -> std::string {
 	return detail::impl_read_file_to_container<std::string>(filepath);
 }
 
 
 // Write files
-auto pre::write_bytevector_to_file(const detail::byte_view& byteview, const std::filesystem::path& filepath) -> void {
+auto prc::write_bytevector_to_file(const detail::byte_view& byteview, const std::filesystem::path& filepath) -> void {
 	if (filepath.has_parent_path()) {
 		const auto dir = filepath.parent_path();
 		if (!std::filesystem::exists(dir)) {
@@ -1222,12 +1221,12 @@ auto pre::write_bytevector_to_file(const detail::byte_view& byteview, const std:
 	}
 }
 
-auto pre::write_string_to_file(const std::string_view& str, const std::filesystem::path& filepath) -> void {
+auto prc::write_string_to_file(const std::string_view& str, const std::filesystem::path& filepath) -> void {
 	write_bytevector_to_file(str, filepath);
 }
 
 
-auto pre::is_vector_equal_to_file_content(
+auto prc::is_vector_equal_to_file_content(
 	const detail::byte_view& byteview, 
 	const std::filesystem::path& filepath
 ) -> bool {
@@ -1273,7 +1272,7 @@ auto pre::is_vector_equal_to_file_content(
 	return true;
 }
 
-auto pre::is_string_equal_to_file_content(std::string_view str, const std::filesystem::path& filepath) -> bool {
+auto prc::is_string_equal_to_file_content(std::string_view str, const std::filesystem::path& filepath) -> bool {
 	return is_vector_equal_to_file_content(str, filepath);
 }
 
@@ -1283,7 +1282,7 @@ auto pre::is_string_equal_to_file_content(std::string_view str, const std::files
 //////////////////////////////////////////////////////////////////////////////
 
 
-namespace pre::detail {
+namespace prc::detail {
 template <typename Pred>
 [[nodiscard]] auto impl_scan_flat(
 	const std::filesystem::path& dir,
@@ -1305,7 +1304,7 @@ template <typename Pred>
 
 
 
-auto pre::files_in_directory(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {
+auto prc::files_in_directory(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {
 	if (!std::filesystem::exists(dir)) {
 		throw detail::exceptions::dir_not_found_exception(dir);
 	}
@@ -1315,7 +1314,7 @@ auto pre::files_in_directory(const std::filesystem::path& dir) -> std::vector<st
 	return detail::impl_scan_flat(dir, [](auto&& p) { return std::filesystem::is_regular_file(p); });
 }
 
-auto pre::subdirs_in_directory(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {
+auto prc::subdirs_in_directory(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {
 	if (!std::filesystem::exists(dir)) {
 		throw detail::exceptions::dir_not_found_exception(dir);
 	}
@@ -1327,7 +1326,7 @@ auto pre::subdirs_in_directory(const std::filesystem::path& dir) -> std::vector<
 
 
 
-namespace pre::detail {
+namespace prc::detail {
 template <typename Pred>
 [[nodiscard]] auto impl_scan_tree(
 	const std::filesystem::path& rootdir,
@@ -1346,7 +1345,7 @@ template <typename Pred>
 }
 
 
-auto pre::files_in_directory_tree(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {
+auto prc::files_in_directory_tree(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {
 	if (!std::filesystem::exists(dir)) {
 		throw detail::exceptions::dir_not_found_exception(dir);
 	}
@@ -1356,7 +1355,7 @@ auto pre::files_in_directory_tree(const std::filesystem::path& dir) -> std::vect
 	return detail::impl_scan_tree(dir, [](auto&& p) { return std::filesystem::is_regular_file(p); });
 }
 
-auto pre::subdirs_in_directory_tree(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {
+auto prc::subdirs_in_directory_tree(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {
 	if (!std::filesystem::exists(dir)) {
 		throw detail::exceptions::dir_not_found_exception(dir);
 	}
