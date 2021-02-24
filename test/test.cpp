@@ -10,6 +10,8 @@
 #include <mutex>
 #include <array>
 #include <chrono>
+#include <string>
+#include <cstddef>
 
 
 
@@ -18,14 +20,96 @@
 
 
 
-TEST_CASE("vector_to_string"){
-	namespace fs = std::filesystem;
-	auto tmpdir = fs::temp_directory_path();
-	auto tmpfile_path = tmpdir / "test.txt";
-	auto data = prc::read_file_to_vector<char>(tmpfile_path);
-	prc::write_bytevector_to_file(data, tmpfile_path);
-	REQUIRE(prc::is_vector_equal_to_file_content(data, tmpfile_path));
+namespace {
+
+
+	template <typename C>
+	auto get_chars() {
+		using namespace std::string_view_literals;
+		if constexpr (std::is_same_v<C, char>) { return "abcdef"sv; }
+		else if constexpr (std::is_same_v<C, wchar_t>) { return L"abcdef"sv; }
+		else if constexpr (std::is_same_v<C, char16_t>) { return u"abcdef"sv; }
+		else if constexpr (std::is_same_v<C, char32_t>) { return U"abcdef"sv; }
+	}
+
+
+	template <typename C>
+	constexpr auto chars = std::basic_string_view<C>{ "abcdef" };
+
+
+
+
+	template <typename T>
+	constexpr auto to_char_func() {
+		if constexpr (std::is_pointer_v<T>) { return std::remove_pointer_t<T>{}; }
+		else if constexpr (std::is_array_v<T>) { return T{}[0]; }
+		else if constexpr (std::is_compound_v<T>) { return T{}[0]; }
+		else { return typename T::value_type{}; }
+	}
+
+	template <typename T>
+	struct CharClass {
+		using char_t = decltype(to_char_func<T>());
+	};
+
+	template <typename T>
+	using to_char_t = typename CharClass<T>::char_t;
+
+
+
+	template <typename Str>
+	auto foo(Str&& str, std::basic_string_view<to_char_t<Str>> delim = chars < to_char_t<Str>>) {
+
+	}
+
+	auto test() {
+
+		{
+			foo(std::string{});
+			//foo(std::wstring{});
+
+			auto x = get_chars<wchar_t>();
+
+			auto str = std::string{ "abc" };
+			auto wstr = std::wstring{str.begin(), str.end()};
+
+		}
+
+		{
+			auto a = "abc";
+			auto b = std::string{ "abc" };
+			auto c = std::string_view{ "abc" };
+			using x = to_char_t<decltype(a)>;
+			static_assert(std::is_same_v<to_char_t<decltype(a)>, to_char_t<decltype(b)>>);
+			static_assert(std::is_same_v<to_char_t<decltype(b)>, to_char_t<decltype(c)>>);
+			static_assert(std::is_same_v<to_char_t<decltype(a)>, to_char_t<decltype(c)>>);
+		}
+
+		using namespace prc::detail;
+
+
+		prc::find_ignore_case("abc", "hej", 0);
+		//auto x = std::basic_string<char>{};
+		//f(x);
+	}
+
 }
+
+
+TEST_CASE("to_lower") {
+	using namespace std::string_view_literals;
+	REQUIRE( prc::to_lower("ABC"sv) == "abc"sv );
+	REQUIRE( prc::to_lower("ABC") == "abc"sv );
+	//REQUIRE(prc::to_lower("ABC") == "abc");
+}
+
+TEST_CASE("to_upper()") {
+	using namespace std::string_literals;
+	REQUIRE(prc::to_upper(std::string_view{ "abc" }) == "ABC");
+}
+
+
+
 
 TEST_CASE("file_to_string"){
 	namespace fs = std::filesystem;
@@ -87,7 +171,7 @@ TEST_CASE("split_string"){
 		"a b c  ",
 	};
 	for (const auto& str : strs) {
-		const auto splitted_sv = prc::split_string_to_sv(str, " ");
+		const auto splitted_sv = prc::split_string_to_views(str, " ");
 		REQUIRE(splitted_sv.size() == 3);
 		REQUIRE(splitted_sv[0] == "a");
 		REQUIRE(splitted_sv[1] == "b");
@@ -116,7 +200,7 @@ TEST_CASE("split_string"){
 			std::vector<std::string>{"abc"}
 		);
 		REQUIRE(
-			prc::split_string_to_sv(str, "") ==
+			prc::split_string_to_views(str, "") ==
 			std::vector<std::string_view>{"abc"}
 		);
 	}
@@ -153,6 +237,7 @@ TEST_CASE("find_ignore_case"){
 
 // String trim
 TEST_CASE("trim_string"){
+
 	const auto strs = std::vector<std::string>{
 		"a b c",
 		"   a b c",
@@ -162,7 +247,7 @@ TEST_CASE("trim_string"){
 		"a b c  ",
 	};
 	for (const auto& str : strs) {
-		const auto trimmed = prc::trim_string_to_sv(str);
+		const auto trimmed = prc::trim_string_to_view(str);
 		REQUIRE(trimmed == std::string_view{ "a b c" });
 		REQUIRE(prc::trim_string(str) == std::string_view{ "a b c" });
 		REQUIRE(
@@ -181,13 +266,14 @@ TEST_CASE("trim_string"){
 		);
 	}
 	{
+		using namespace std::string_view_literals;
 		const auto str = std::string{ "abc" };
 		REQUIRE(
 			prc::trim_string(str, "") ==
 			"abc"
 		);
 		REQUIRE(
-			prc::trim_string_to_sv(str, "") ==
+			prc::trim_string_to_view(str, "") ==
 			"abc"
 		);
 	}
@@ -211,23 +297,23 @@ TEST_CASE("string_to_number"){
 	REQUIRE(prc::string_to_number<double>("abc") == std::nullopt);
 }
 
-TEST_CASE("to_upper()") {
-	using namespace std::string_literals;
-	REQUIRE(prc::to_upper(std::string_view{ "abc" }) == "ABC");
-}
-
-
 
 
 
 
 // String replace
-TEST_CASE("replace_all"){
+TEST_CASE("replace_all (std::string)"){
 	using namespace std::string_literals;
 	REQUIRE(
 		prc::replace_all("abcabcb"s, "b", "dd") ==
 		"addcaddcdd"
 	);
+
+	REQUIRE(
+		prc::replace_all("aaaa", "aaaa", "dd") ==
+		"dd"
+	);
+
 
 	REQUIRE(
 		prc::replace_all("abcabcb"s, "b", "") ==
@@ -259,6 +345,43 @@ TEST_CASE("replace_all"){
 		" bb bbb bb "
 	);
 }
+
+TEST_CASE("replace_all (const char*)") {
+	REQUIRE(
+		prc::replace_all("abcabcb", "b", "dd") ==
+		"addcaddcdd"
+	);
+
+	REQUIRE(
+		prc::replace_all("abcabcb", "b", "") ==
+		"acac"
+	);
+
+	REQUIRE(
+		prc::replace_all("aa bbb aa", "aa", "xxxx") ==
+		"xxxx bbb xxxx"
+	);
+
+	REQUIRE(
+		prc::replace_all("aa bbb aa", "aa", "x") ==
+		"x bbb x"
+	);
+
+	REQUIRE(
+		prc::replace_all("aa bbb aa", "bbb", "") ==
+		"aa  aa"
+	);
+
+	REQUIRE(
+		prc::replace_all(" aa bbb aa ", "aa", "xxxx") ==
+		" xxxx bbb xxxx "
+	);
+	REQUIRE(
+		prc::replace_all(" aa bbb aa ", "aa", "bb") ==
+		" bb bbb bb "
+	);
+}
+
 
 
 
@@ -314,6 +437,16 @@ TEST_CASE("join_string"){
 		prc::join_strings(std::array{ "a"sv, "b"sv, "c"sv }, "") ==
 		"abc"
 	);
+
+	REQUIRE(
+		prc::join_strings(std::array{ "aa"sv, "bb"sv, "cc"sv }) ==
+		"aabbcc"
+	);
+	REQUIRE(
+		prc::join_strings(std::array{ "a"sv, "b"sv, "c"sv }) ==
+		"abc"
+	);
+
 };
 
 
@@ -387,6 +520,67 @@ TEST_CASE("held_type_name"){
 		prc::held_type_name(std::variant<int, float, std::string>{int{}}) ==
 		prc::held_type_name(int{})
 	);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+
+#include "../include/precooked_excluded.hpp"
+
+TEST_CASE("vector_to_string") {
+	namespace fs = std::filesystem;
+	auto tmpdir = fs::temp_directory_path();
+	auto tmpfile_path = tmpdir / "test.txt";
+	auto data = prc::read_file_to_vector<char>(tmpfile_path);
+	prc::write_vector_to_file(data, tmpfile_path);
+	REQUIRE(prc::is_vector_equal_to_file_content(data, tmpfile_path));
 }
 
 

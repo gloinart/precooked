@@ -13,13 +13,12 @@
 #else
 	#define PRECOOKED_INLINE
 #endif
-
 #ifndef PRECOOKED_ASSERT
 	#ifdef NDEBUG
 		#define PRECOOKED_ASSERT(x) for(;false;) { [[maybe_unused]] auto result = (x); }
 	#else
 		#include <cassert>
-		#define PRECOOKED_ASSERT(x) assert(x)
+		#define PRECOOKED_ASSERT(x) assert(x);
 	#endif
 #endif
 
@@ -32,75 +31,74 @@ namespace std::filesystem { class path; }
 namespace prc::detail { class byte_view; }
 
 
+namespace prc::detail {
+template <typename T> constexpr auto underlying_char_f() {
+	if constexpr (std::is_pointer_v<T>) { return std::remove_pointer_t<T>{}; }
+	else if constexpr (std::is_array_v<T>) { return T{}[0]; }
+	else { return typename T::value_type{}; }
+}
+template <typename T> using underlying_char_t = decltype(underlying_char_f<T>());
+}
+
 namespace prc {
 
 // String case insesitive
-[[nodiscard]] PRECOOKED_INLINE auto to_lower(std::string str) noexcept -> std::string;
-[[nodiscard]] PRECOOKED_INLINE auto to_upper(std::string str) noexcept -> std::string;
-[[nodiscard]] PRECOOKED_INLINE auto to_lower(std::string_view str) -> std::string;
-[[nodiscard]] PRECOOKED_INLINE auto to_upper(std::string_view str) -> std::string;
-[[nodiscard]] PRECOOKED_INLINE auto is_equal_ignore_case(std::string_view a, std::string_view b) noexcept -> bool;
-[[nodiscard]] PRECOOKED_INLINE auto contains_substring(std::string_view haystack, std::string_view needle) noexcept -> bool;
-[[nodiscard]] PRECOOKED_INLINE auto contains_substring_ignore_case(std::string_view haystack, std::string_view needle) noexcept -> bool;
-[[nodiscard]] PRECOOKED_INLINE auto find_ignore_case(std::string_view haystack, std::string_view needle, size_t offset = 0) noexcept -> size_t;
+template <typename Str0, typename Str1> [[nodiscard]] auto find_ignore_case(const Str0& haystack, const Str1& needle, size_t offset = 0) noexcept -> size_t;
+template <typename Str0, typename Str1> [[nodiscard]] auto is_equal_ignore_case(const Str0& a, const Str1& b) noexcept -> bool;
+template <typename Str0, typename Str1> [[nodiscard]] auto contains_substring(const Str0& haystack, const Str1& needle) noexcept -> bool;
+template <typename Str0, typename Str1> [[nodiscard]] auto contains_substring_ignore_case(const Str0& haystack, const Str1& needle) noexcept -> bool;
+
+template <typename Char> [[nodiscard]] auto to_lower(std::basic_string<Char> str) noexcept -> std::basic_string<Char>;
+template <typename Char> [[nodiscard]] auto to_upper(std::basic_string<Char> str) noexcept -> std::basic_string<Char>;
+template <typename StrView> [[nodiscard]] auto to_lower(const StrView& str) -> std::basic_string<detail::underlying_char_t<StrView>>;
+template <typename StrView> [[nodiscard]] auto to_upper(const StrView& str) -> std::basic_string<detail::underlying_char_t<StrView>>;
 
 // String - trim
-constexpr auto default_trimchars = std::string_view{"\t\r\t\n "};
-[[nodiscard]] PRECOOKED_INLINE auto trim_string(std::string str, std::string_view trim_chars = default_trimchars) noexcept -> std::string;
-[[nodiscard]] PRECOOKED_INLINE auto trim_string_to_sv(std::string_view str, std::string_view trim_chars = default_trimchars) noexcept -> std::string_view;
-[[nodiscard]] PRECOOKED_INLINE auto trim_string_to_sv(std::string&& str, std::string_view trim_chars = default_trimchars) noexcept -> std::string_view = delete; // Prevent dangling std::string_views
-[[nodiscard]] PRECOOKED_INLINE auto is_trimmed(std::string_view str, std::string_view trim_chars = default_trimchars) noexcept -> bool;
+template <typename Str0> [[nodiscard]] auto is_trimmed(const Str0& str) noexcept -> bool;
+template <typename Char> [[nodiscard]] auto trim_string(std::basic_string<Char> str) noexcept -> std::basic_string<Char>;
+template <typename Str0> [[nodiscard]] auto trim_string_to_view(const Str0& str) noexcept -> std::basic_string_view<detail::underlying_char_t<Str0>>;
+template <typename Char> [[nodiscard]] auto trim_string_to_view(std::basic_string<Char>&& str) noexcept -> std::basic_string_view<Char> = delete; // Prevent dangling std::string_views
+template <typename Str0, typename Str1> [[nodiscard]] auto is_trimmed(const Str0& str, const Str1& trim_chars) noexcept -> bool;
+template <typename Char, typename Str0> [[nodiscard]] auto trim_string(std::basic_string<Char> str, const Str0& trim_chars) noexcept -> std::basic_string<Char>;
+template <typename Str0, typename Str1> [[nodiscard]] auto trim_string_to_view(const Str0& str, const Str1& trim_chars) noexcept -> std::basic_string_view<detail::underlying_char_t<Str0>>;
+template <typename Char, typename Str0> [[nodiscard]] auto trim_string_to_view(std::basic_string<Char>&& str, const Str0& trim_chars) noexcept -> std::basic_string_view<Char> = delete; // Prevent dangling std::string_views
 
 // String - replace
-[[nodiscard]] PRECOOKED_INLINE auto replace_all(std::string str, std::string_view src, std::string_view dst) -> std::string; // Does not throw if dst.size() <= src.size() 
-[[nodiscard]] PRECOOKED_INLINE auto replace_all(std::string_view str, std::string_view src, std::string_view dst) -> std::string;
-[[nodiscard]] PRECOOKED_INLINE auto replace_all(const char* str, std::string_view src, std::string_view dst) -> std::string; // Avoid ambiguity between std::string and std::string_view conversion
-[[nodiscard]] PRECOOKED_INLINE auto replace_all_ignore_case(std::string str, std::string_view src, std::string_view dst)->std::string; // Does not throw if dst.size() <= src.size() 
-[[nodiscard]] PRECOOKED_INLINE auto replace_all_ignore_case(std::string_view str, std::string_view src, std::string_view dst)->std::string;
-[[nodiscard]] PRECOOKED_INLINE auto replace_all_ignore_case(const char* str, std::string_view src, std::string_view dst)->std::string; // Avoid ambiguity between std::string and std::string_view conversion
-
-// String - remove
-[[nodiscard]] PRECOOKED_INLINE auto remove_all(std::string str, std::string_view src) noexcept ->std::string;
-[[nodiscard]] PRECOOKED_INLINE auto remove_all(std::string_view str, std::string_view src)->std::string;
-[[nodiscard]] PRECOOKED_INLINE auto remove_all(const char* str, std::string_view src)->std::string; // Avoid ambiguity between std::string and std::string_view conversion
-[[nodiscard]] PRECOOKED_INLINE auto remove_all_ignore_case(std::string str, std::string_view src) noexcept->std::string;
-[[nodiscard]] PRECOOKED_INLINE auto remove_all_ignore_case(std::string_view str, std::string_view src)->std::string;
-[[nodiscard]] PRECOOKED_INLINE auto remove_all_ignore_case(const char* str, std::string_view src)->std::string; // Avoid ambiguity between std::string and std::string_view conversion
+template <typename Char, typename Str0, typename Str1> auto [[nodiscard]] replace_all(std::basic_string<Char> haystack, const Str0& needle, const Str1& replacement) -> std::basic_string<Char>; // Noexcept if dst.size() <= src.size() 
+template <typename Str0, typename Str1, typename Str2> auto [[nodiscard]] replace_all(const Str0& haystack, const Str1& needle, const Str2& replacement) -> std::basic_string<detail::underlying_char_t<Str0>>;
+template <typename Char, typename Str0, typename Str1> auto [[nodiscard]] replace_all_ignore_case(std::basic_string<Char> haystack, const Str0& needle, const Str1& replacement) -> std::basic_string<Char>; // Noexcept if dst.size() <= src.size() 
+template <typename Str0, typename Str1, typename Str2> auto [[nodiscard]] replace_all_ignore_case(const Str0& haystack, const Str1& needle, const Str2& replacement) -> std::basic_string<detail::underlying_char_t<Str0>>;
 
 // String - split
-[[nodiscard]] PRECOOKED_INLINE auto split_string(std::string_view str, const std::string_view delimiters) -> std::vector<std::string>;
-[[nodiscard]] PRECOOKED_INLINE auto split_string_to_sv(std::string_view str, const std::string_view delimiters) -> std::vector<std::string_view>;
-[[nodiscard]] PRECOOKED_INLINE auto split_string_to_sv(std::string&& str, const std::string_view delimiters) -> std::vector<std::string_view> = delete; // Prevent dangling std::string_views
-[[nodiscard]] PRECOOKED_INLINE auto split_string_to_lines(std::string_view str)->std::vector<std::string>;
+template <typename Str0, typename Str1> [[nodiscard]] auto split_string(const Str0& str, const Str1& delimiters) -> std::vector<std::basic_string<detail::underlying_char_t<Str0>>>;
+template <typename Str0, typename Str1> [[nodiscard]] auto split_string_to_views(const Str0& str, const Str1& delimiters) -> std::vector<std::basic_string_view<detail::underlying_char_t<Str0>>>;
+template <typename Char, typename Str0> [[nodiscard]] auto split_string_to_views(std::basic_string<Char>&& str, Str0&& delimiters) -> std::vector<std::basic_string_view<Char>> = delete; // Prevent dangling std::string_views
+template <typename Str> [[nodiscard]] auto split_string_to_lines(const Str& str) -> std::vector<std::basic_string<detail::underlying_char_t<Str>>>;
 
 // String - join
-template <typename Range>
-[[nodiscard]] auto join_strings(const Range& strings, const std::string_view delimiter)-> std::string;
-template <typename Range>
-[[nodiscard]] auto join_strings(const Range& strings)->std::string;
+template <typename Strings, typename Str>
+[[nodiscard]] auto join_strings(const Strings& strings, const Str& delimiter) -> std::basic_string<detail::underlying_char_t<Str>>;
+template <typename Strings, typename Char = typename Strings::value_type::value_type>
+[[nodiscard]] auto join_strings(const Strings& strings) -> std::basic_string<Char>;
 
 // String conversion
 template <typename T> [[nodiscard]] auto string_to_number(std::string_view str) noexcept -> std::optional<T>;
-template <typename T> [[nodiscard]] auto number_to_string(const T& number) -> std::string; // Just here for consistency, uses std::to_string
-template <typename T> [[nodiscard]] auto to_string(const T& val)->std::string;
+template <typename T> [[nodiscard]] auto number_to_string(const T& number) -> std::string; // Just here for consistency, simply uses std::to_string(...) underneath
+template <typename T> [[nodiscard]] auto to_string(const T& val) -> std::string;
 
-	
 // IO - Read files
-[[nodiscard]] PRECOOKED_INLINE auto read_file_to_string(const std::filesystem::path& filepath)->std::string;
-template <typename T>
-[[nodiscard]] PRECOOKED_INLINE auto read_file_to_vector(const std::filesystem::path& filepath)->std::vector<T>;
-[[nodiscard]] PRECOOKED_INLINE auto is_vector_equal_to_file_content(const detail::byte_view& bytevector, const std::filesystem::path& filepath) -> bool;
-[[nodiscard]] PRECOOKED_INLINE auto is_string_equal_to_file_content(std::string_view str, const std::filesystem::path& filepath) -> bool;
+[[nodiscard]] PRECOOKED_INLINE auto read_file_to_string(const std::filesystem::path& filepath) -> std::string;
+template <typename T> [[nodiscard]] auto read_file_to_vector(const std::filesystem::path& filepath) -> std::vector<T>;
 
 // IO - Write files
-PRECOOKED_INLINE auto write_string_to_file(const std::string_view& str, const std::filesystem::path& filepath) -> void;
-PRECOOKED_INLINE auto write_bytevector_to_file(const detail::byte_view& bytevector, const std::filesystem::path& filepath) -> void;
+template <typename Str0> auto write_string_to_file(const Str0& str, const std::filesystem::path& filepath) -> void;
+PRECOOKED_INLINE auto write_vector_to_file(const detail::byte_view& bytevector, const std::filesystem::path& filepath) -> void;
 
 // Scan filesystem
-[[nodiscard]] PRECOOKED_INLINE auto files_in_directory(const std::filesystem::path& dir)->std::vector<std::filesystem::path>;
-[[nodiscard]] PRECOOKED_INLINE auto subdirs_in_directory(const std::filesystem::path& dir)->std::vector<std::filesystem::path>;
-[[nodiscard]] PRECOOKED_INLINE auto files_in_directory_tree(const std::filesystem::path& dir)->std::vector<std::filesystem::path>;
-[[nodiscard]] PRECOOKED_INLINE auto subdirs_in_directory_tree(const std::filesystem::path& dir)->std::vector<std::filesystem::path>;
+[[nodiscard]] PRECOOKED_INLINE auto files_in_directory(const std::filesystem::path& dir) -> std::vector<std::filesystem::path>;
+[[nodiscard]] PRECOOKED_INLINE auto subdirs_in_directory(const std::filesystem::path& dir) -> std::vector<std::filesystem::path>;
+[[nodiscard]] PRECOOKED_INLINE auto files_in_directory_tree(const std::filesystem::path& dir) -> std::vector<std::filesystem::path>;
+[[nodiscard]] PRECOOKED_INLINE auto subdirs_in_directory_tree(const std::filesystem::path& dir) -> std::vector<std::filesystem::path>;
 
 
 // Convenience
@@ -112,9 +110,9 @@ template <typename DstType, typename SrcType>
 [[nodiscard]] auto cast(const SrcType& src_type)->DstType;
 
 // Type names
-template <typename T> [[nodiscard]] auto type_name()->std::string;
-template <typename T> [[nodiscard]] auto type_name(T&&)->std::string;
-template <typename T> [[nodiscard]] auto held_type_name(const T& value)->std::string;
+template <typename T> [[nodiscard]] auto type_name() -> std::string;
+template <typename T> [[nodiscard]] auto type_name(T&&) -> std::string;
+template <typename T> [[nodiscard]] auto held_type_name(const T& value) -> std::string;
 
 }
 
@@ -174,8 +172,8 @@ public:
 	, element_size_{sizeof(T)} {
 		using ptr_t = decltype(c.data());
 		using value_t = std::decay_t<std::remove_pointer_t<ptr_t>>;
-		static_assert(std::is_arithmetic_v<value_t>);
-		static_assert(!std::is_same_v<std::vector<bool>, std::decay_t<C>>);
+		static_assert(std::is_arithmetic_v<value_t>, "Non-arithmetic values is not allowed");
+		static_assert(!std::is_same_v<std::vector<bool>, std::decay_t<C>>, "vector<bool> is not allowed");
 	}
 	[[nodiscard]] constexpr auto size() const noexcept { return num_elements_ * element_size_; } // In bytes
 	[[nodiscard]] constexpr auto begin() const noexcept { return ptr_; }
@@ -320,19 +318,16 @@ namespace prc::detail::introspection {
 namespace prc::detail {
 	template <typename T>
 	using is_container_t = decltype(std::declval<const T&>().begin(), std::declval<const T&>().end());
-
 	template <typename T>
 	using is_container = introspection::detect<T, is_container_t>;
 
 	template <typename T>
 	using has_ostream_t = decltype(std::declval<std::ostream&>() << std::declval<T>());
-
 	template <typename T>
 	using has_ostream = introspection::detect<T, has_ostream_t>;
 
 	template <typename T>
 	using is_tuple_t = decltype(std::tuple_size<T>::value);
-
 	template <typename T>
 	using is_tuple = introspection::detect<T, is_tuple_t>;
 
@@ -623,8 +618,12 @@ auto prc::read_file_to_vector(const std::filesystem::path& filepath) -> std::vec
 	return detail::impl_read_file_to_container<std::vector<T>>(filepath);
 }
 
-
-
+template <typename Str0>
+auto prc::write_string_to_file(const Str0& str, const std::filesystem::path& filepath) -> void {
+	using Char = detail::underlying_char_t<Str0>;
+	const auto byte_view = detail::byte_view{ str };
+	write_vector_to_file(byte_view, filepath);
+}
 
 
 
@@ -635,18 +634,20 @@ auto prc::read_file_to_vector(const std::filesystem::path& filepath) -> std::vec
 
 #include <numeric>
 
-template <typename Range>
-auto prc::join_strings(const Range& strings, const std::string_view delimiter)->std::string {
+
+namespace prc::detail {
+template <typename Strings, typename Char>
+[[nodiscard]] auto impl_join_strings(const Strings& strings, const std::basic_string_view<Char>& delimiter) -> std::basic_string<Char> {
 	if (strings.empty()) {
 		return {};
 	}
-	const auto target_size = 
-		std::accumulate(strings.begin(), strings.end(), size_t{ 0 }, [](size_t sum, auto&& str) {
+	const auto target_size =
+		std::accumulate(strings.begin(), strings.end(), size_t{ 0 }, [](size_t sum, const auto& str) {
 			return sum + str.size();
 		})
 		+ (strings.size() - 1) * delimiter.size();
 	// Merge strings
-	auto joined = std::string{};
+	auto joined = std::basic_string<Char>{};
 	joined.reserve(target_size);
 	if (delimiter.empty()) {
 		for (auto&& str : strings) {
@@ -663,10 +664,17 @@ auto prc::join_strings(const Range& strings, const std::string_view delimiter)->
 	PRECOOKED_ASSERT(joined.size() == target_size);
 	return joined;
 }
+}
 
-template <typename Range>
-auto prc::join_strings(const Range& strings)->std::string {
-	return join_strings(strings, std::string_view{});
+template <typename Strings, typename Str>
+auto prc::join_strings(const Strings& strings, const Str& delimiter) -> std::basic_string<detail::underlying_char_t<Str>> {
+	using Char = detail::underlying_char_t<Str>;
+	return detail::impl_join_strings(strings, std::basic_string_view<Char>{delimiter});
+}
+
+template <typename Strings, typename Char>
+auto prc::join_strings(const Strings& strings) -> std::basic_string<Char> {
+	return detail::impl_join_strings(strings, std::basic_string_view<Char>{});
 }
 
 
@@ -769,13 +777,39 @@ auto prc::detail::filesize_to_size_t(
 //////////////////////////////////////////////////////////////////////////////
 
 
+
+namespace prc::detail {
+template <typename Char>
+[[nodiscard]] constexpr auto default_trim_chars() noexcept -> std::basic_string_view<Char> {
+	using namespace std::string_view_literals;
+	if constexpr (std::is_same_v<Char, char>) { return "\t\r\t\n "sv; }
+	else if constexpr (std::is_same_v<Char, wchar_t>) { return L"\t\r\t\n "sv; }
+	else if constexpr (std::is_same_v<Char, char16_t>) { return u"\t\r\t\n "sv; }
+	else if constexpr (std::is_same_v<Char, char32_t>) { return U"\t\r\t\n "sv; }
+}
+template <typename Char>
+[[nodiscard]] constexpr auto linebreaks() noexcept -> std::basic_string_view<Char> {
+	using namespace std::string_view_literals;
+	if constexpr (std::is_same_v<Char, char>) { return "\r\n"sv; }
+	else if constexpr (std::is_same_v<Char, wchar_t>) { return L"\r\n"sv; }
+	else if constexpr (std::is_same_v<Char, char16_t>) { return u"\r\n"sv; }
+	else if constexpr (std::is_same_v<Char, char32_t>) { return U"\r\n"sv; }
+}
+}
+
+
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+
 namespace prc::detail {
 
-template <typename PartType>
+template <typename Char, typename PartType>
 [[nodiscard]] auto impl_split_string(
-	const std::string_view str,
-	const std::string_view delimiters
+	const std::basic_string_view<Char> str,
+	const std::basic_string_view<Char> delimiters
 ) -> std::vector<PartType> {
+	constexpr auto npos = std::basic_string_view<Char>::npos;
 	if (str.empty()) {
 		return {};
 	}
@@ -787,28 +821,37 @@ template <typename PartType>
 		return {};
 	}
 	// Calculate num parts in order to allocated vector
-	const auto last_not_delimiter = str.find_last_not_of(delimiters);
-	auto num_parts = size_t{ 1 };
-	for (size_t i = first_not_delimiter + 1; i < last_not_delimiter; ++i) {
-		PRECOOKED_ASSERT(0 < i);
-		PRECOOKED_ASSERT(i < str.size());
-		const auto is_new_part =
-			delimiters.find(str[i - 1]) == std::string::npos && 
-			delimiters.find(str[i]) != std::string::npos;
-		if (is_new_part) {
-			++num_parts;
+	auto calculate_num_parts_f = [](
+		const std::basic_string_view<Char>& str, 
+		const std::basic_string_view<Char>& delimiters, 
+		const size_t first_not_delimiter
+	) noexcept -> size_t {
+		constexpr auto npos = std::basic_string_view<Char>::npos;
+		const auto last_not_delimiter = str.find_last_not_of(delimiters);
+		auto num_parts = size_t{ 1 };
+		for (size_t i = first_not_delimiter + 1; i < last_not_delimiter; ++i) {
+			PRECOOKED_ASSERT(0 < i);
+			PRECOOKED_ASSERT(i < str.size());
+			const auto is_new_part =
+				delimiters.find(str[i - 1]) == npos &&
+				delimiters.find(str[i]) != npos;
+			if (is_new_part) {
+				++num_parts;
+			}
 		}
-	}
+		return num_parts;
+	};
+	const auto num_parts = calculate_num_parts_f(str, delimiters, first_not_delimiter);
 	// Split string
 	auto parts = std::vector<PartType>{};
 	parts.reserve(num_parts);
 	for (
 		auto left = first_not_delimiter, right = size_t{ 0 };
-		left != std::string_view::npos;
+		left != npos;
 		left = str.find_first_not_of(delimiters, right)
 	) {
 		right = str.find_first_of(delimiters, left + 1);
-		right = right == std::string::npos ? str.size() : right;
+		right = right == npos ? str.size() : right;
 		PRECOOKED_ASSERT(right <= str.size());
 		PRECOOKED_ASSERT(left <= right);
 		parts.emplace_back(PartType{ str.data() + left, right - left });
@@ -819,70 +862,126 @@ template <typename PartType>
 }
 
 
-
+template <typename Str0, typename Str1>
 auto prc::split_string(
-	const std::string_view str, 
-	const std::string_view delimiters
-) -> std::vector<std::string> {
-	return detail::impl_split_string<std::string>(str, delimiters);
+	const Str0& str, 
+	const Str1& delimiters
+) -> std::vector<std::basic_string<detail::underlying_char_t<Str0>>> {
+	using Char = detail::underlying_char_t<Str0>;
+	return detail::impl_split_string<Char, std::basic_string<Char>>(str, delimiters);
 }
 
-auto prc::split_string_to_sv(
-	const std::string_view str, 
-	const std::string_view delimiters
-) -> std::vector<std::string_view> {
-	return detail::impl_split_string<std::string_view>(str, delimiters);
+template <typename Str0, typename Str1>
+auto prc::split_string_to_views(
+	const Str0& str, 
+	const Str1& delimiters
+) -> std::vector<std::basic_string_view<detail::underlying_char_t<Str0>>> {
+	using Char = detail::underlying_char_t<Str0>;
+	return detail::impl_split_string<Char, std::basic_string_view<Char>>(str, delimiters);
 }
 
+template <typename Str>
 auto prc::split_string_to_lines(
-	const std::string_view str
-) -> std::vector<std::string> {
-	using namespace std::string_view_literals;
-	return split_string(str, "\n\r"sv);
+	const Str& str
+) -> std::vector<std::basic_string<detail::underlying_char_t<Str>>> {
+	using Char = detail::underlying_char_t<Str>;
+	return split_string(str, detail::linebreaks<Char>());
 }
 
+
+
+
+
+
+
+
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+
+
+
+
+
+
+
+
+
+template <typename Char>
 auto prc::trim_string(
-	std::string str, 
-	const std::string_view trim_chars
-) noexcept -> std::string {
-	if (str.empty() || trim_chars.empty()) {
+	std::basic_string<Char> str
+) noexcept -> std::basic_string<Char> {
+	return trim_string(std::move(str), detail::default_trim_chars<Char>());
+}
+
+template <typename Char, typename Str0>
+auto prc::trim_string(
+	std::basic_string<Char> str, 
+	const Str0& trim_chars
+) noexcept -> std::basic_string<Char> {
+	const auto trim_chars_sv = std::basic_string_view<Char>{ trim_chars };
+	constexpr auto npos = std::basic_string_view<Char>::npos;
+	if (str.empty() || trim_chars_sv.empty()) {
 		return str;
 	}
-	const auto last_idx = str.find_last_not_of(trim_chars);
-	if (last_idx != std::string::npos) {
+	const auto last_idx = str.find_last_not_of(trim_chars_sv);
+	if (last_idx != npos) {
 		str.erase(str.begin() + last_idx + 1, str.end());
 	}
-	const auto first_idx = str.find_first_not_of(trim_chars);
-	if (first_idx != std::string::npos && first_idx != 0) {
+	const auto first_idx = str.find_first_not_of(trim_chars_sv);
+	if (first_idx != npos && first_idx != 0) {
 		str.erase(str.begin(), str.begin() + first_idx);
 	}
 	return str;
 }
 
-auto prc::trim_string_to_sv(
-	std::string_view str,
-	const std::string_view trim_chars
-) noexcept -> std::string_view {
-	if (str.empty() || trim_chars.empty()) {
-		return str;
+template <typename Str0>
+auto prc::trim_string_to_view(
+	const Str0& str
+) noexcept -> std::basic_string_view<detail::underlying_char_t<Str0>> {
+	return trim_string_to_view(str, detail::default_trim_chars < detail::underlying_char_t<Str0>> ());
+}
+
+ template <typename Str0, typename Str1>
+auto prc::trim_string_to_view(
+	const Str0& str,
+	const Str1& trim_chars
+) noexcept -> std::basic_string_view<detail::underlying_char_t<Str0>> {
+	using Char = detail::underlying_char_t<Str0>;
+	const auto trim_chars_sv = std::basic_string_view<Char>{ trim_chars };
+	auto sv = std::basic_string_view<Char>{ str };
+	if (sv.empty() || trim_chars_sv.empty()) {
+		return sv;
 	}
-	const auto first_idx = str.find_first_not_of(trim_chars);
+	const auto first_idx = sv.find_first_not_of(trim_chars_sv);
 	if (first_idx != std::string_view::npos) {
-		str = str.substr(first_idx);
+		sv = sv.substr(first_idx);
 	}
-	const auto last_idx = str.find_last_not_of(trim_chars);
+	const auto last_idx = sv.find_last_not_of(trim_chars_sv);
 	if (last_idx != std::string_view::npos) {
-		str = str.substr(0, last_idx + 1);
+		sv = sv.substr(0, last_idx + 1);
 	}
-	return str;
+	return sv;
 }
 
 
-auto prc::is_trimmed(const std::string_view str, const std::string_view trim_chars) noexcept -> bool {
+
+template<typename Str0>
+auto prc::is_trimmed(const Str0& str) noexcept -> bool {
+	using Char = detail::underlying_char_t<Str0>;
+	const auto sv = std::basic_string_view<Char>{ str };
+	return is_trimmed(str, detail::default_trim_chars<detail::underlying_char_t<Str0>>());
+}
+
+template<typename Str0, typename Str1>
+auto prc::is_trimmed(const Str0& str, const Str1& trim_chars) noexcept -> bool {
+	using Char = detail::underlying_char_t<Str0>;
+	const auto sv = std::basic_string_view<Char>{ str };
+	constexpr auto npos = std::basic_string_view<Char>::npos;
 	return
-		str.empty() ? true :
-		trim_chars.find(str.front()) != std::string_view::npos ? false :
-		trim_chars.find(str.back()) != std::string_view::npos ? false :
+		sv.empty() ? true :
+		trim_chars.find(sv.front()) != npos ? false :
+		trim_chars.find(sv.back()) != npos ? false :
 		true;
 }
 
@@ -893,23 +992,83 @@ auto prc::is_trimmed(const std::string_view str, const std::string_view trim_cha
 
 
 
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+
+namespace prc::detail {
+
+
+constexpr auto find_case_sensitive_func = [](const auto& str, const auto& key, const size_t offset) noexcept -> size_t {
+	return str.find(key, offset);
+};
+
+const auto is_chars_equal_ignore_case = [](auto&& a, auto&& b) noexcept {
+	return a == b || std::tolower(a) == std::tolower(b);
+};
+template <typename Char>
+[[nodiscard]] auto impl_is_equal_ignore_case(
+	const std::basic_string_view<Char>& a,
+	const std::basic_string_view<Char>& b
+) noexcept -> bool {
+	PRECOOKED_ASSERT(a.size() == b.size());
+	return std::equal(a.begin(), a.end(), b.begin(), detail::is_chars_equal_ignore_case);
+}
+
+
+
+template <typename Char>
+[[nodiscard]] auto impl_find_ignore_case(
+	const std::basic_string_view<Char>& haystack,
+	const std::basic_string_view<Char>& needle,
+	const size_t offset
+) noexcept -> size_t {
+	PRECOOKED_ASSERT(haystack.size() >= needle.size());
+	PRECOOKED_ASSERT(!needle.empty());
+	constexpr auto npos = std::basic_string_view<Char>::npos;
+	const auto i_end = (1 + haystack.size()) - needle.size();
+	if (offset > i_end) {
+		return npos;
+	}
+	const auto equals_needle_front_f = [
+		upper = std::toupper(needle.front()),
+		lower = std::tolower(needle.front())
+	](const Char& c) {
+		return c == upper || c == lower;
+	};
+	const auto needle_tail = needle.substr(1);
+	for (size_t i = offset; i < i_end; ++i) {
+		PRECOOKED_ASSERT(i < haystack.size());
+		if (!equals_needle_front_f(haystack[i])) {
+			continue;
+		}
+		PRECOOKED_ASSERT(i + needle.size() <= haystack.size());
+		const auto candidate_tail = haystack.substr(i + 1, needle.size() - 1);
+		if (detail::impl_is_equal_ignore_case(candidate_tail, needle_tail)) {
+			return i;
+		}
+	}
+	return npos;
+}
+
+}
+
+
+
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
 
 
 
 namespace prc::detail {
 
 
-constexpr auto find_case_sensitive = [](const std::string_view& str, const std::string_view& key, const size_t offset) noexcept -> size_t {
-	return str.find(key, offset);
-};
-constexpr auto find_ignore_case = [](const std::string_view& str, const std::string_view& key, const size_t offset) noexcept -> size_t {
-	return prc::find_ignore_case(str, key, offset);
-};
-
-PRECOOKED_INLINE auto replace_string_part(
-	std::string& io_string, 
+template <typename Char>
+auto replace_string_part(
+	std::basic_string<Char>& io_string, 
 	const size_t offset,
-	const std::string_view& new_content
+	const std::basic_string_view<Char>& new_content
 ) noexcept -> void {
 	PRECOOKED_ASSERT(offset + new_content.size() <= io_string.size());
 	std::copy(new_content.begin(), new_content.end(), io_string.begin() + offset);
@@ -917,179 +1076,174 @@ PRECOOKED_INLINE auto replace_string_part(
 
 
 // This function replaces string of equal size
-template <typename FindFunc>
+template <typename Char, typename FindFunc>
 [[nodiscard]] PRECOOKED_INLINE auto impl_replace_all_equal_key_length(
-	std::string str, 
-	const std::string_view key, 
-	const std::string_view dst,
+	std::basic_string<Char> haystack, 
+	const std::basic_string_view<Char> needle,
+	const std::basic_string_view<Char> replacement,
 	const FindFunc& find_func
 ) noexcept -> std::string {
-	PRECOOKED_ASSERT(key.size() == dst.size());
+	PRECOOKED_ASSERT(needle.size() == replacement.size());
+	constexpr auto npos = std::basic_string_view<Char>::npos;
 	for (
-		auto idx = find_func(str, key, 0);
-		idx != std::string::npos;
-		idx = find_func(str, key, idx + key.size())
+		auto idx = find_func(haystack, needle, 0);
+		idx != npos;
+		idx = find_func(haystack, needle, idx + needle.size())
 	) {
-		replace_string_part(str, idx, dst);
+		replace_string_part(haystack, idx, replacement);
 	}
-	return str;
+	return haystack;
 }
 
 
 // This function modifies the string in-place.
-// Requires dst to be smaller than key.
-template <typename FindFunc>
+// Requires replacement to be smaller than needle.
+template <typename Char, typename FindFunc>
 [[nodiscard]] PRECOOKED_INLINE auto impl_replace_all_shrink_string(
-	std::string str, 
-	const std::string_view key,
-	const std::string_view dst,
+	std::basic_string<Char> haystack,
+	const std::basic_string_view<Char> needle,
+	const std::basic_string_view<Char> replacement,
 	const FindFunc& find_func
-) noexcept -> std::string {
-	PRECOOKED_ASSERT(dst.size() < key.size());
+) noexcept -> std::basic_string<Char> {
+	PRECOOKED_ASSERT(replacement.size() < needle.size());
+	constexpr auto npos = std::basic_string_view<Char>::npos;
 	// Optimization to avoid copying the first part
-	const auto first_key = find_func(str, key, 0);
-	if (first_key == std::string::npos) {
-		return str;
+	const auto first_key = find_func(haystack, needle, 0);
+	if (first_key == npos) {
+		return haystack;
 	}
-	replace_string_part(str, first_key, dst);
-	auto write_pos = first_key + dst.size();
-	for (auto read_pos = first_key + key.size();;) {
+	replace_string_part(haystack, first_key, replacement);
+	auto write_pos = first_key + replacement.size();
+	for (auto read_pos = first_key + needle.size();;) {
 		PRECOOKED_ASSERT(write_pos < read_pos);
-		const auto key_pos = std::min(find_func(str, key, read_pos), str.size());
+		const auto key_pos = std::min(find_func(haystack, needle, read_pos), haystack.size());
 		while (read_pos < key_pos) {
-			PRECOOKED_ASSERT(write_pos < str.size());
-			PRECOOKED_ASSERT(read_pos < str.size());
-			str[write_pos] = str[read_pos];
+			PRECOOKED_ASSERT(write_pos < haystack.size());
+			PRECOOKED_ASSERT(read_pos < haystack.size());
+			haystack[write_pos] = haystack[read_pos];
 			++write_pos;
 			++read_pos;
 		}
-		if (key_pos == str.size()) {
+		if (key_pos == haystack.size()) {
 			break;
 		}
-		replace_string_part(str, write_pos, dst);
-		read_pos += key.size();
-		write_pos += dst.size();
+		replace_string_part(haystack, write_pos, replacement);
+		read_pos += needle.size();
+		write_pos += replacement.size();
 	}
-	PRECOOKED_ASSERT(write_pos < str.size());
-	str.resize(write_pos);
-	return str;
+	PRECOOKED_ASSERT(write_pos < haystack.size());
+	haystack.resize(write_pos);
+	return haystack;
 }
 
 // This function builds a new string.
-// Required if dst is larger then key or the source is a string_view.
-template <typename FindFunc>
+// Required if replacement is larger then needle or the source is a string_view.
+template <typename Char, typename FindFunc>
 [[nodiscard]] PRECOOKED_INLINE auto impl_replace_all_rebuild_string(
-	const std::string_view str, 
-	const std::string_view& key, 
-	const std::string_view& dst,
+	const std::basic_string_view<Char>& haystack,
+	const std::basic_string_view<Char>& needle,
+	const std::basic_string_view<Char>& replacement,
 	const FindFunc& find_func
-) -> std::string {
-	auto ret = std::string{};
-	ret.reserve(str.size());
+) -> std::basic_string<Char> {
+
+	const auto first_match = std::min(find_func(haystack, needle, 0), haystack.size());
+	if (first_match >= haystack.size()) {
+		return std::basic_string<Char>{ haystack };
+	}
+	const auto calculate_num_occurances_f = [&]() noexcept {
+		auto num_occurances = size_t{ 0 };
+		for (
+			auto i = first_match + needle.size(), i_end = haystack.size();
+			i < i_end; 
+			i = find_func(haystack, needle, i + needle.size())
+		) {
+			++num_occurances;
+		}
+		return num_occurances;
+	};
+	const auto target_size =
+		needle.size() < replacement.size() ? haystack.size() + (replacement.size() - needle.size()) * calculate_num_occurances_f() :
+		replacement.size() < needle.size() ? haystack.size() - (needle.size() - replacement.size()) * calculate_num_occurances_f() :
+		haystack.size();
+		
+	auto ret = std::basic_string<Char>{};
+	ret.reserve(target_size);
 	for (
-		size_t left = 0, right = std::min(find_func(str, key, 0), str.size());
+		size_t left = 0, right = first_match;
 		;
-		right = std::min(find_func(str, key, left), str.size())
+		right = std::min(find_func(haystack, needle, left), haystack.size())
 	) {
 		PRECOOKED_ASSERT(left <= right);
-		ret += str.substr(left, right - left);
-		if (right == str.size()) {
-			return ret;
+		PRECOOKED_ASSERT(right <= haystack.size());
+		ret += haystack.substr(left, right - left);
+		if (right == haystack.size()) {
+			break;
 		}
-		ret += dst;
-		left = right + key.size();
+		PRECOOKED_ASSERT(right < haystack.size());
+		ret += replacement;
+		left = right + needle.size();
 	}
+	PRECOOKED_ASSERT(ret.size() == target_size);
 	return ret;
 }
 
 }
 
-
-auto prc::replace_all(std::string str, const std::string_view key, const std::string_view dst) -> std::string {
+template <typename Char, typename Str0, typename Str1>
+auto prc::replace_all(std::basic_string<Char> haystack, const Str0& needle, const Str1& replacement) -> std::basic_string<Char> {
 	// Pick implementation based on key/dst size
+	const auto haystack_sv = std::basic_string_view<Char>{ haystack };
+	const auto needle_sv = std::basic_string_view<Char>{ needle };
+	const auto replacement_sv = std::basic_string_view<Char>{ replacement };
+	const auto& find_func = detail::find_case_sensitive_func;
 	return
-		(str.empty() || key.empty()) ? str :
-		key.length() == dst.length() ? detail::impl_replace_all_equal_key_length(std::move(str), key, dst, detail::find_case_sensitive) :
-		dst.length() < key.length() ? detail::impl_replace_all_shrink_string(std::move(str), key, dst, detail::find_case_sensitive) :
-		detail::impl_replace_all_rebuild_string(str, key, dst, detail::find_case_sensitive);
+		(needle_sv.empty() || needle_sv.size() > haystack_sv.size()) ? haystack :
+		needle_sv.length() == replacement_sv.length() ? detail::impl_replace_all_equal_key_length(std::move(haystack), needle_sv, replacement_sv, find_func) :
+		replacement_sv.length() < needle_sv.length() ? detail::impl_replace_all_shrink_string(std::move(haystack), needle_sv, replacement_sv, find_func) :
+		detail::impl_replace_all_rebuild_string<Char>(haystack, needle_sv, replacement_sv, find_func);
 }
 
-auto prc::replace_all(const std::string_view str, const std::string_view key, const std::string_view dst) -> std::string {
-	return (str.empty() || key.empty()) ?
-		std::string{ str } :
-		detail::impl_replace_all_rebuild_string(str, key, dst, detail::find_case_sensitive);
+
+template <typename Str0, typename Str1, typename Str2>
+auto prc::replace_all(const Str0& haystack, const Str1& needle, const Str2& replacement) -> std::basic_string<detail::underlying_char_t<Str0>> {
+	using Char = detail::underlying_char_t<Str0>;
+	const auto haystack_sv = std::basic_string_view<Char>{ haystack };
+	const auto needle_sv = std::basic_string_view<Char>{ needle };
+	const auto replacement_sv = std::basic_string_view<Char>{ replacement };
+	const auto& find_func = detail::find_case_sensitive_func;
+	return (needle_sv.empty() || needle_sv.size() > haystack_sv.size()) ?
+		std::basic_string<Char>{ haystack_sv } :
+		detail::impl_replace_all_rebuild_string(haystack_sv, needle_sv, replacement_sv, find_func);
 }
 
-auto prc::replace_all(const char* str, const std::string_view key, const std::string_view dst) -> std::string {
-	return replace_all(std::string_view{ str }, key, dst);
-}
 
-auto prc::replace_all_ignore_case(std::string str, const std::string_view key, const std::string_view dst) -> std::string {
-	// Pick implementation based on key/dst size
+template <typename Char, typename Str0, typename Str1>
+auto prc::replace_all_ignore_case(std::basic_string<Char> haystack, const Str0& needle, const Str1& replacement) -> std::basic_string<Char> {
+	const auto haystack_sv = std::basic_string_view<Char>{ haystack };
+	const auto needle_sv = std::basic_string_view<Char>{ needle };
+	const auto replacement_sv = std::basic_string_view<Char>{ replacement };
+	const auto& find_func = detail::impl_find_ignore_case<Char>;
 	return
-		(str.empty() || key.empty()) ? str :
-		key.length() == dst.length() ? detail::impl_replace_all_equal_key_length(std::move(str), key, dst, detail::find_ignore_case) :
-		dst.length() < key.length() ? detail::impl_replace_all_shrink_string(std::move(str), key, dst, detail::find_ignore_case) :
-		detail::impl_replace_all_rebuild_string(str, key, dst, detail::find_ignore_case);
+		(needle_sv.empty() || needle_sv.size() > haystack_sv.size()) ? haystack :
+		needle_sv.length() == replacement_sv.length() ? detail::impl_replace_all_equal_key_length(std::move(haystack), needle_sv, replacement_sv, find_func) :
+		replacement_sv.length() < needle_sv.length() ? detail::impl_replace_all_shrink_string(std::move(haystack), needle_sv, replacement_sv, find_func) :
+		detail::impl_replace_all_rebuild_string<Char>(haystack, needle_sv, replacement_sv, find_func);
 }
 
-auto prc::replace_all_ignore_case(const std::string_view str, const std::string_view key, const std::string_view dst) -> std::string {
-	return (str.empty() || key.empty()) ?
-		std::string{ str } :
-		detail::impl_replace_all_rebuild_string(str, key, dst, detail::find_ignore_case);
+template <typename Str0, typename Str1, typename Str2>
+auto prc::replace_all_ignore_case(const Str0& haystack, const Str1& needle, const Str2& replacement) -> std::basic_string<detail::underlying_char_t<Str0>> {
+	using Char = detail::underlying_char_t<Str0>;
+	const auto haystack_sv = std::basic_string_view<Char>{ haystack };
+	const auto needle_sv = std::basic_string_view<Char>{ needle };
+	const auto replacement_sv = std::basic_string_view<Char>{ replacement };
+	const auto& find_func = detail::impl_find_ignore_case<Char>;
+	return (needle_sv.empty() || needle_sv.size() > haystack_sv.size()) ?
+		std::basic_string<Char>{ haystack_sv } :
+		detail::impl_replace_all_rebuild_string(haystack_sv, needle_sv, replacement_sv, find_func);
 }
 
-auto prc::replace_all_ignore_case(const char* str, const std::string_view key, const std::string_view dst) -> std::string {
-	return replace_all_ignore_case(std::string_view{ str }, key, dst);
-}
 
 
-
-
-
-
-
-
-
-
-//////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////
-
-
-
-
-
-
-
-// String - remove
-auto prc::remove_all(std::string str, std::string_view src) noexcept ->std::string {
-	return str.empty() || src.empty() ?
-		std::string{}:
-		detail::impl_replace_all_shrink_string(std::move(str), src, std::string_view{}, detail::find_case_sensitive);
-}
-auto prc::remove_all(std::string_view str, std::string_view src)->std::string {
-	return str.empty() || src.empty() ?
-		std::string{} : 
-		detail::impl_replace_all_rebuild_string(std::move(str), src, std::string_view{}, detail::find_case_sensitive);
-}
-auto prc::remove_all(const char* str, std::string_view src)->std::string {
-	return remove_all(std::string_view(str), src);
-
-}
-auto prc::remove_all_ignore_case(std::string str, std::string_view src) noexcept->std::string {
-	return str.empty() || src.empty() ?
-		std::string{} : 
-		detail::impl_replace_all_shrink_string(std::move(str), src, std::string_view{}, detail::find_ignore_case);
-}
-auto prc::remove_all_ignore_case(std::string_view str, std::string_view src)->std::string {
-	return str.empty() || src.empty() ?
-		std::string{} : 
-		detail::impl_replace_all_rebuild_string(std::move(str), src, std::string_view{}, detail::find_ignore_case);
-}
-auto prc::remove_all_ignore_case(const char* str, std::string_view src)->std::string {
-	return remove_all_ignore_case(std::string_view(str), src);
-}
 
 
 
@@ -1109,98 +1263,86 @@ auto prc::remove_all_ignore_case(const char* str, std::string_view src)->std::st
 #include <algorithm>
 #include <cctype>
 
-namespace prc::detail {
-const auto is_chars_equal_ignore_case = [](unsigned char a, unsigned char b) noexcept {
-	return a == b || std::tolower(a) == std::tolower(b);
-};
-[[nodiscard]] PRECOOKED_INLINE auto impl_is_equal_ignore_case(const std::string_view& a, const std::string_view& b) noexcept -> bool {
-	PRECOOKED_ASSERT(a.size() == b.size());
-	return std::equal(a.begin(), a.end(), b.begin(), detail::is_chars_equal_ignore_case);
-}
-}
-
-auto prc::to_lower(std::string str) noexcept -> std::string {
-	std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
+template <typename Char>
+auto prc::to_lower(std::basic_string<Char> str) noexcept -> std::basic_string<Char> {
+	std::transform(str.begin(), str.end(), str.begin(), [](const Char& c) {
 		return std::tolower(c);
 	});
 	return str;
 }
 
-auto prc::to_upper(std::string str) noexcept -> std::string {
-	std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
-		return std::toupper(c);
-	});
-	return str;
-}
-
-auto prc::to_lower(std::string_view sv) -> std::string {
-	auto str = std::string{};
+template <typename StrView> 
+auto prc::to_lower(const StrView& strview) -> std::basic_string<detail::underlying_char_t<StrView>> {
+	using Char = detail::underlying_char_t<StrView>;
+	const auto sv = std::basic_string_view<Char>{strview};
+	auto str = std::basic_string<Char>{};
 	str.reserve(sv.size());
-	std::transform(sv.begin(), sv.end(), std::back_inserter(str), [](unsigned char c) {
+	std::transform(sv.begin(), sv.end(), std::back_inserter(str), [](const Char& c) {
 		return std::tolower(c);
 	});
 	return str;
 }
 
-auto prc::to_upper(std::string_view sv) -> std::string {
-	auto str = std::string{};
-	str.reserve(sv.size());
-	std::transform(sv.begin(), sv.end(), std::back_inserter(str), [](unsigned char c) {
+
+template <typename Char>
+auto prc::to_upper(std::basic_string<Char> str) noexcept -> std::basic_string<Char> {
+	std::transform(str.begin(), str.end(), str.begin(), [](const Char& c) {
 		return std::toupper(c);
 	});
 	return str;
 }
 
+template <typename StrView>
+auto prc::to_upper(const StrView& strview) -> std::basic_string<detail::underlying_char_t<StrView>> {
+	using Char = detail::underlying_char_t<StrView>;
+	const auto sv = std::basic_string_view<Char>{ strview };
+	auto str = std::basic_string<Char>{};
+	str.reserve(sv.size());
+	std::transform(sv.begin(), sv.end(), std::back_inserter(str), [](const Char& c) {
+		return std::toupper(c);
+	});
+	return str;
+}
 
-
-auto prc::is_equal_ignore_case(const std::string_view a, const std::string_view b) noexcept -> bool {
+template <typename Str0, typename Str1>
+auto prc::is_equal_ignore_case(const Str0& a, const Str1& b) noexcept -> bool {
+	const auto a_sv = std::basic_string_view{ a };
+	const auto b_sv = std::basic_string_view{ b };
 	return
-		a.size() == b.size() &&
-		detail::impl_is_equal_ignore_case(a, b);
+		a_sv.size() == b_sv.size() &&
+		detail::impl_is_equal_ignore_case(a_sv, b_sv);
 }
 
-auto prc::contains_substring(const std::string_view haystack, const std::string_view needle) noexcept -> bool {
-	return haystack.find(needle) != std::string::npos;
+template <typename Str0, typename Str1>
+auto prc::contains_substring(const Str0& haystack, const Str1& needle) noexcept -> bool {
+	using Char = detail::underlying_char_t<Str0>;
+	const auto haystack_sv = std::basic_string_view<Char>{ haystack };
+	return haystack_sv.find(needle) != std::string::npos;
 }
 
-auto prc::contains_substring_ignore_case(const std::string_view haystack, const std::string_view needle) noexcept -> bool {
+template <typename Str0, typename Str1>
+auto prc::contains_substring_ignore_case(const Str0& haystack, const Str1& needle) noexcept -> bool {
 	return find_ignore_case(haystack, needle, 0) != std::string::npos;
 }
 
 
-[[nodiscard]] PRECOOKED_INLINE auto prc::find_ignore_case(
-	const std::string_view haystack, 
-	const std::string_view needle, 
+template <typename Str0, typename Str1>
+auto prc::find_ignore_case(
+	const Str0& haystack,
+	const Str1& needle,
 	const size_t offset
 ) noexcept -> size_t {
-	static_assert(std::string::npos == std::string_view::npos);
-	if (haystack.size() < needle.size() || needle.empty()) {
+	using Char = detail::underlying_char_t<Str0>;
+	const auto haystack_sv = std::basic_string_view<Char>{ haystack };
+	const auto needle_sv = std::basic_string_view<Char>{ needle };
+	if (haystack_sv.size() < needle_sv.size() || needle_sv.empty()) {
 		return std::string::npos;
 	}
-	const auto i_end = (1 + haystack.size()) - needle.size();
-	if (offset > i_end) {
-		return std::string::npos;
-	}
-	const auto equals_needle_front = [
-		upper = std::toupper(needle.front()),
-		lower = std::tolower(needle.front())
-	](const unsigned char c) {
-		return c == upper || c == lower;
-	};
-
-	const auto needle_tail = needle.substr(1);
-	for (size_t i = offset; i < i_end; ++i) {
-		PRECOOKED_ASSERT(i < haystack.size());
-		if (!equals_needle_front(haystack[i])) {
-			continue;
-		}
-		PRECOOKED_ASSERT(i + needle.size() <= haystack.size());
-		const auto candidate_tail = haystack.substr(i + 1, needle.size() - 1);
-		if (detail::impl_is_equal_ignore_case(candidate_tail, needle_tail)) {
-			return i;
-		}
-	}
-	return std::string::npos;
+	return detail::impl_find_ignore_case(
+		std::basic_string_view<Char>{haystack_sv},
+		std::basic_string_view<Char>{needle_sv},
+		offset
+	);
 }
 
 
@@ -1223,7 +1365,7 @@ auto prc::read_file_to_string(const std::filesystem::path& filepath) -> std::str
 
 
 // Write files
-auto prc::write_bytevector_to_file(const detail::byte_view& byteview, const std::filesystem::path& filepath) -> void {
+auto prc::write_vector_to_file(const detail::byte_view& byteview, const std::filesystem::path& filepath) -> void {
 	if (filepath.has_parent_path()) {
 		const auto dir = filepath.parent_path();
 		if (!std::filesystem::exists(dir)) {
@@ -1248,60 +1390,8 @@ auto prc::write_bytevector_to_file(const detail::byte_view& byteview, const std:
 	}
 }
 
-auto prc::write_string_to_file(const std::string_view& str, const std::filesystem::path& filepath) -> void {
-	write_bytevector_to_file(str, filepath);
-}
 
 
-auto prc::is_vector_equal_to_file_content(
-	const detail::byte_view& byteview, 
-	const std::filesystem::path& filepath
-) -> bool {
-	if (!std::filesystem::exists(filepath)) {
-		return false;
-	}
-	using byte_t = detail::byte_view::byte_t;
-	const auto file_size_uintmax = std::filesystem::file_size(filepath);
-	const auto file_size_optional = detail::filesize_to_size_t(file_size_uintmax);
-	if (!file_size_optional.has_value()) {
-		throw detail::exceptions::file_too_large_exception(filepath, file_size_uintmax);
-	}
-	const auto file_size = *file_size_optional;
-	if (file_size != byteview.size()) {
-		return false;
-	}
-	auto buffer = std::vector<detail::byte_view::byte_t>{};
-	auto file_stream = std::ifstream{ filepath, std::ios::binary };
-	if (!file_stream.is_open()) {
-		throw detail::exceptions::read_file_exception(filepath);
-	}
-	const auto scope_exit = detail::scope_exit{ [&file_stream]() {
-		file_stream.close();
-	} };
-	constexpr auto buffer_size = size_t{ 1024 };
-	for (auto i = size_t{ 0 }; i < file_size; i += buffer_size) {
-		PRECOOKED_ASSERT(i <= file_size);
-		const auto bytes_left = file_size - i;
-		const auto chunk_size = std::min(bytes_left, buffer_size);
-		buffer.resize(std::max(chunk_size, buffer.size())); // Never shrink buffer
-		file_stream.read(buffer.data(), chunk_size);
-		PRECOOKED_ASSERT(i + chunk_size <= byteview.size());
-		const auto is_equal = std::equal(
-			buffer.begin(), 
-			buffer.begin() + chunk_size,
-			byteview.begin() + i,
-			byteview.begin() + i + chunk_size
-		);
-		if (!is_equal) {
-			return false;
-		}
-	}
-	return true;
-}
-
-auto prc::is_string_equal_to_file_content(std::string_view str, const std::filesystem::path& filepath) -> bool {
-	return is_vector_equal_to_file_content(str, filepath);
-}
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1391,3 +1481,7 @@ auto prc::subdirs_in_directory_tree(const std::filesystem::path& dir) -> std::ve
 	}
 	return detail::impl_scan_tree(dir, [](auto&& p) { return std::filesystem::is_directory(p); });
 }
+
+
+
+static_assert(std::string_view::npos == std::string::npos);
