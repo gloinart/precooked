@@ -22,6 +22,57 @@
 
 namespace {
 
+	template <typename T>
+	constexpr auto is_optional_v =
+		decltype(prc::detail::is_optional(std::declval<T>()))::value;
+
+	template <typename T>
+	constexpr auto is_variant_v = decltype(prc::detail::is_variant(std::declval<T>()))::value;
+
+	template <typename T>
+	constexpr auto is_smart_ptr_v = decltype(prc::detail::is_smart_ptr(std::declval<T>()))::value;
+
+
+	template <typename Char>
+	constexpr auto is_valid_char() {
+		return
+			std::is_same_v<Char, char> ||
+			std::is_same_v<Char, wchar_t> ||
+			std::is_same_v<Char, char16_t> ||
+			std::is_same_v<Char, char32_t>;
+	}
+	template <typename Char>
+	using is_valid_char_t = decltype(is_valid_char<Char>);
+
+	template <typename Char>
+	using is_valid_char_v = typename is_valid_char_t<Char>::value;
+
+
+
+
+	template <typename T>
+	constexpr auto is_string() {
+		constexpr auto success =
+			std::is_same_v<T, std::basic_string<char>> ||
+			std::is_same_v<T, std::basic_string<wchar_t>> ||
+			std::is_same_v<T, std::basic_string<char16_t>> ||
+			std::is_same_v<T, std::basic_string<char32_t>> ||
+			std::is_same_v<T, std::basic_string_view<char>> ||
+			std::is_same_v<T, std::basic_string_view<wchar_t>> ||
+			std::is_same_v<T, std::basic_string_view<char16_t>> ||
+			std::is_same_v<T, std::basic_string_view<char32_t>> ||
+			std::is_same_v<T, const char*> ||
+			std::is_same_v<T, const wchar_t*> ||
+			std::is_same_v<T, const char16_t*> ||
+			std::is_same_v<T, const char32_t*>;
+		if constexpr (success) {
+			return std::true_type{};
+		}
+		else {
+			return std::false_type{};
+		}
+	}
+
 
 	template <typename C>
 	auto get_chars() {
@@ -64,6 +115,20 @@ namespace {
 
 	auto test() {
 
+
+
+		static_assert(is_optional_v<std::optional<int>>);
+		static_assert(is_optional_v<std::optional<int>&>);
+		static_assert(is_optional_v<std::optional<int>&&>);
+		static_assert(is_optional_v<const std::optional<int>&&>);
+		static_assert(is_optional_v<const std::optional<int>&>);
+		static_assert(!is_optional_v<int>);
+
+		{
+			constexpr auto x = "abc";
+			using a = decltype(x);
+		}
+
 		{
 			foo(std::string{});
 			//foo(std::wstring{});
@@ -98,14 +163,27 @@ namespace {
 
 TEST_CASE("to_lower") {
 	using namespace std::string_view_literals;
+	using namespace std::string_literals;
 	REQUIRE( prc::to_lower("ABC"sv) == "abc"sv );
 	REQUIRE( prc::to_lower("ABC") == "abc"sv );
+
+	REQUIRE(prc::to_lower(L"ABC") == L"abc"sv);
+	REQUIRE(prc::to_lower(u"ABC") == u"abc"sv);
+	REQUIRE(prc::to_lower(U"ABC") == U"abc"sv);
 	//REQUIRE(prc::to_lower("ABC") == "abc");
+
+
+	REQUIRE(prc::to_lower(L"ABC"s) == L"abc"sv);
+	REQUIRE(prc::to_lower(u"ABC"s) == u"abc"sv);
+	REQUIRE(prc::to_lower(U"ABC"s) == U"abc"sv);
 }
 
 TEST_CASE("to_upper()") {
+	using namespace std::string_view_literals;
 	using namespace std::string_literals;
-	REQUIRE(prc::to_upper(std::string_view{ "abc" }) == "ABC");
+	REQUIRE(prc::to_upper("abc"sv) == "ABC");
+	REQUIRE(prc::to_upper("abc") == "ABC");
+	REQUIRE(prc::to_upper("abc"s) == "ABC");
 }
 
 
@@ -120,6 +198,14 @@ TEST_CASE("file_to_string"){
 	REQUIRE(fs::exists(tmpfile));
 	auto back = prc::read_file_to_string(tmpfile);
 	REQUIRE(back == content);
+
+
+	{
+		prc::write_string_to_file("abc", tmpfile);
+		prc::write_string_to_file(u"abc", tmpfile);
+		prc::write_string_to_file(U"abc", tmpfile);
+
+	}
 }
 
 
@@ -148,7 +234,11 @@ TEST_CASE("tuple"){
 }
 
 
-
+template <typename Char>
+auto convert_string(std::string str) {
+	auto ret = std::basic_string<Char>{ str.begin(), str.end() };
+	return ret;
+}
 
 
 
@@ -162,36 +252,57 @@ TEST_CASE("split_string"){
 		prc::split_string("xxxyxyxy", "xy").empty()
 	);
 
-	const auto strs = std::vector<std::string>{
-		"a b c",
-		"   a b c",
-		"  a  b c",
-		"  a  b    c ",
-		"a b c ",
-		"a b c  ",
+	auto test_for_string_type = [](auto&& string_type_identifier) {
+		using string_t = std::decay_t<decltype(string_type_identifier)>;
+		using char_t = typename string_t::value_type;
+		const auto char_strs = std::vector<std::string>{
+			"a b c",
+			"   a b c",
+			"  a  b c",
+			"  a  b    c ",
+			"a b c ",
+			"a b c  ",
+		};
+
+		auto strs = std::vector<string_t>{};
+		for (auto&& char_str : char_strs) {
+			strs.emplace_back(convert_string<char_t>(char_str));
+		}
+
+		const auto space = convert_string<char_t>(" ");
+		const auto a = convert_string<char_t>("a");
+		const auto b = convert_string<char_t>("b");
+		const auto c = convert_string<char_t>("c");
+
+		for (const auto& str : strs) {
+			const auto splitted_sv = prc::split_string_to_views(str, space);
+			REQUIRE(splitted_sv.size() == 3);
+			REQUIRE(splitted_sv[0] == a);
+			REQUIRE(splitted_sv[1] == b);
+			REQUIRE(splitted_sv[2] == c);
+			REQUIRE(
+				prc::split_string(str, space) ==
+				(std::vector<string_t>{a, b, c})
+			);
+		}
+		for (const auto& str : strs) {
+			const auto splitted_sv = prc::split_string(str, space);
+			REQUIRE(splitted_sv.size() == 3);
+			REQUIRE(splitted_sv[0] == a);
+			REQUIRE(splitted_sv[1] == b);
+			REQUIRE(splitted_sv[2] == c);
+			REQUIRE(
+				prc::split_string(str, space) ==
+				(std::vector<string_t>{a, b, c})
+			);
+		}
 	};
-	for (const auto& str : strs) {
-		const auto splitted_sv = prc::split_string_to_views(str, " ");
-		REQUIRE(splitted_sv.size() == 3);
-		REQUIRE(splitted_sv[0] == "a");
-		REQUIRE(splitted_sv[1] == "b");
-		REQUIRE(splitted_sv[2] == "c");
-		REQUIRE(
-			prc::split_string(str, " ") ==
-			(std::vector<std::string>{"a", "b", "c"})
-		);
-	}
-	for (const auto& str : strs) {
-		const auto splitted_sv = prc::split_string(str, " ");
-		REQUIRE(splitted_sv.size() == 3);
-		REQUIRE(splitted_sv[0] == "a");
-		REQUIRE(splitted_sv[1] == "b");
-		REQUIRE(splitted_sv[2] == "c");
-		REQUIRE(
-			prc::split_string(str, " ") ==
-			(std::vector<std::string>{"a", "b", "c"})
-		);
-	}
+
+	test_for_string_type(std::basic_string<char>{});
+	test_for_string_type(std::basic_string<wchar_t>{});
+	test_for_string_type(std::basic_string<char16_t>{});
+	test_for_string_type(std::basic_string<char32_t>{});
+
 
 	{
 		const auto str = std::string{ "abc" };
@@ -204,6 +315,19 @@ TEST_CASE("split_string"){
 			std::vector<std::string_view>{"abc"}
 		);
 	}
+
+	{
+		const auto str = std::string{ "abc" };
+		REQUIRE(
+			prc::split_string(str, "a") ==
+			std::vector<std::string>{"bc"}
+		);
+		REQUIRE(
+			prc::split_string_to_views(str, "c") ==
+			std::vector<std::string_view>{"ab"}
+		);
+	}
+
 }
 
 
@@ -297,7 +421,25 @@ TEST_CASE("string_to_number"){
 	REQUIRE(prc::string_to_number<double>("abc") == std::nullopt);
 }
 
+TEST_CASE("replace_all_ignore_case") {
+	using namespace std::string_literals;
+	using namespace std::string_view_literals;
+	REQUIRE(
+		prc::replace_all_ignore_case("ABC", "b", "") ==
+		"AC"
+	);
 
+	REQUIRE(
+		prc::replace_all_ignore_case("ABC"s, "b"sv, ""s) ==
+		"AC"s
+	);
+
+	REQUIRE(
+		prc::replace_all_ignore_case("ABC"sv, "b"sv, ""sv) ==
+		"AC"sv
+	);
+
+};
 
 
 
@@ -447,6 +589,15 @@ TEST_CASE("join_string"){
 		"abc"
 	);
 
+
+
+
+
+	REQUIRE(
+		prc::join_strings(std::array{ u"a"sv, u"b"sv, u"c"sv }) ==
+		u"abc"
+	);
+
 };
 
 
@@ -499,9 +650,29 @@ TEST_CASE("to_string"){
 		"[6 7]"
 	);
 	REQUIRE(
+		prc::to_string(std::optional<int>{}) ==
+		"std::nullopt"
+	);
+	REQUIRE(
 		prc::to_string(std::variant<int, float, std::string>{std::string{ "hej" }}) ==
 		prc::to_string(std::string{ "hej" })
 	);
+
+	REQUIRE(
+		prc::to_string(std::make_shared<std::string>("hej")) ==
+		"hej"
+	);
+
+	REQUIRE(
+		prc::to_string(std::shared_ptr<std::string>{}) ==
+		"nullptr"
+	);
+
+	REQUIRE(
+		prc::to_string(std::unique_ptr<std::string>{}) ==
+		"nullptr"
+	);
+
 };
 
 

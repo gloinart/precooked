@@ -53,7 +53,7 @@ template <typename Char> [[nodiscard]] auto to_upper(std::basic_string<Char> str
 template <typename StrView> [[nodiscard]] auto to_lower(const StrView& str) -> std::basic_string<detail::underlying_char_t<StrView>>;
 template <typename StrView> [[nodiscard]] auto to_upper(const StrView& str) -> std::basic_string<detail::underlying_char_t<StrView>>;
 
-// String - trim
+/// String - trim
 template <typename Str0> [[nodiscard]] auto is_trimmed(const Str0& str) noexcept -> bool;
 template <typename Char> [[nodiscard]] auto trim_string(std::basic_string<Char> str) noexcept -> std::basic_string<Char>;
 template <typename Str0> [[nodiscard]] auto trim_string_to_view(const Str0& str) noexcept -> std::basic_string_view<detail::underlying_char_t<Str0>>;
@@ -102,9 +102,9 @@ PRECOOKED_INLINE auto write_vector_to_file(const detail::byte_view& bytevector, 
 
 
 // Convenience
-template <typename Tpl, typename Func, size_t Idx = 0>
-auto tuple_for_each(Tpl& tpl, Func&& func) -> void;
-template <typename Tpl, typename Func, size_t Idx = 0>
+template <typename Tpl, typename Func>
+auto tuple_for_each(Tpl&& tpl, Func&& func) -> void;
+template <typename Tpl, typename Func>
 [[nodiscard]] auto tuple_any_of(const Tpl& tpl, const Func& func) -> bool;
 template <typename DstType, typename SrcType>
 [[nodiscard]] auto cast(const SrcType& src_type)->DstType;
@@ -335,12 +335,20 @@ namespace prc::detail {
 	template <typename T> constexpr auto is_smart_ptr(const std::unique_ptr<T>&) { return std::true_type{}; }
 	template <typename T> constexpr auto is_smart_ptr(const std::shared_ptr<T>&) { return std::true_type{}; }
 	template <typename T> constexpr auto is_smart_ptr(const T&) { return std::false_type{}; }
+	template <typename T>
+	constexpr auto is_smart_ptr_v = decltype(prc::detail::is_smart_ptr(std::declval<T>()))::value;
 
 	template <typename ...Ts> constexpr auto is_variant(const std::variant<Ts...>&) { return std::true_type{}; }
 	template <typename T> constexpr auto is_variant(const T&) { return std::false_type{}; }
+	template <typename T>
+	constexpr auto is_variant_v = decltype(prc::detail::is_variant(std::declval<T>()))::value;
 
 	template <typename T> constexpr auto is_optional(const std::optional<T>&) { return std::true_type{}; }
 	template <typename T> constexpr auto is_optional(const T&) { return std::false_type{}; }
+	template <typename T>
+	constexpr auto is_optional_v =
+		decltype(prc::detail::is_optional(std::declval<T>()))::value;
+
 }
 
 
@@ -352,22 +360,35 @@ namespace prc::detail {
 #include <tuple>
 #include <type_traits>
 
-template<typename Tpl, typename Func, size_t Idx>
-auto prc::tuple_for_each(Tpl& tpl, Func&& func) -> void {
+namespace prc::detail {
+template<typename Tpl, typename Func, size_t Idx = 0>
+auto impl_tuple_for_each(Tpl& tpl, Func&& func) -> void {
 	if constexpr (Idx < std::tuple_size_v<Tpl>) {
 		std::invoke(func, std::get<Idx>(tpl));
-		tuple_for_each<Tpl, Func, Idx + 1>(tpl, std::forward<Func>(func));
+		impl_tuple_for_each<Tpl, Func, Idx + 1>(tpl, std::forward<Func>(func));
 	}
 }
 
-template <typename Tpl, typename Func, size_t Idx>
-auto prc::tuple_any_of(const Tpl& tpl, const Func& func) -> bool {
+template <typename Tpl, typename Func, size_t Idx = 0>
+auto impl_tuple_any_of(const Tpl& tpl, const Func& func) -> bool {
 	if constexpr (Idx < std::tuple_size_v<Tpl>) {
 		return std::invoke(func, std::get<Idx>(tpl)) ?
 			true :
-			tuple_any_of<Tpl, Func, Idx + 1>(tpl, func);
+			impl_tuple_any_of<Tpl, Func, Idx + 1>(tpl, func);
 	}
 	return false;
+}
+
+}
+
+template<typename Tpl, typename Func>
+auto prc::tuple_for_each(Tpl&& tpl, Func&& func) -> void {
+	return detail::impl_tuple_for_each(std::forward<Tpl>(tpl), std::forward<Func>(func));
+}
+
+template <typename Tpl, typename Func>
+auto prc::tuple_any_of(const Tpl& tpl, const Func& func) -> bool {
+	return detail::impl_tuple_any_of(tpl, func);
 }
 
 template <typename DstType, typename SrcType>
@@ -442,7 +463,7 @@ auto prc::held_type_name(const T& value) -> std::string {
 
 template <typename T>
 auto prc::string_to_number(const std::string_view str) noexcept -> std::optional<T> {
-	static_assert(std::is_arithmetic_v<T>);
+	static_assert(std::is_arithmetic_v<T>, "T needs to be an arithmetic type");
 	auto value = T{};
 	const auto* ptr_end = str.data() + str.size();
 	const auto result = std::from_chars(str.data(), ptr_end, value);
@@ -479,17 +500,17 @@ auto prc::to_string(const T& value) -> std::string {
 	else if constexpr (std::is_arithmetic_v<value_t>) {
 		return std::to_string(value);
 	}
-	else if constexpr (std::is_same_v<decltype(detail::is_smart_ptr(value)), std::true_type>) {
+	else if constexpr (detail::is_smart_ptr_v<T>) {
 		return value == nullptr ? 
 			"nullptr" : 
-			std::to_string(*value);
+			to_string(*value);
 	}
-	else if constexpr (std::is_same_v<decltype(detail::is_variant(value)), std::true_type>) {
+	else if constexpr (detail::is_variant_v<T>) {
 		return std::visit([](auto&& candidate) {
 			return to_string(candidate);
 		}, value);
 	}
-	else if constexpr (std::is_same_v<decltype(detail::is_optional(value)), std::true_type>) {
+	else if constexpr (detail::is_optional_v<T>) {
 		return value.has_value() ?
 			to_string(*value) :
 			"std::nullopt";
@@ -586,7 +607,12 @@ template <typename Container>
 	const auto file_size = *file_size_optional;
 	const auto element_size = sizeof(value_t);
 	if (!(file_size % element_size) == 0) {
-		throw detail::exceptions::filesize_not_compatible_with_typesize_exception(filepath, file_size, element_size, type_name<value_t>());
+		throw detail::exceptions::filesize_not_compatible_with_typesize_exception(
+			filepath, 
+			file_size,
+			element_size, 
+			type_name<value_t>()
+		);
 	}
 	auto file_stream = std::ifstream{ filepath, std::ios::binary };
 	if (!file_stream.is_open()) {
@@ -605,6 +631,18 @@ template <typename Container>
 	}
 	return data;
 }
+
+
+
+template <typename Char>
+constexpr auto is_valid_char_v = std::bool_constant<
+	std::is_same_v<Char, char> ||
+	std::is_same_v<Char, wchar_t> ||
+	std::is_same_v<Char, char16_t> ||
+	std::is_same_v<Char, char32_t>
+>::value;
+
+
 }
 
 
@@ -614,14 +652,15 @@ template <typename Container>
 
 template <typename T>
 auto prc::read_file_to_vector(const std::filesystem::path& filepath) -> std::vector<T> {
-	static_assert(std::is_arithmetic_v<T>);
+	static_assert(std::is_arithmetic_v<T>, "T needs to be arithmetic");
 	return detail::impl_read_file_to_container<std::vector<T>>(filepath);
 }
 
 template <typename Str0>
 auto prc::write_string_to_file(const Str0& str, const std::filesystem::path& filepath) -> void {
 	using Char = detail::underlying_char_t<Str0>;
-	const auto byte_view = detail::byte_view{ str };
+	const auto sv = std::basic_string_view<Char>{ str };
+	const auto byte_view = detail::byte_view{ sv };
 	write_vector_to_file(byte_view, filepath);
 }
 
@@ -877,6 +916,7 @@ auto prc::split_string_to_views(
 	const Str1& delimiters
 ) -> std::vector<std::basic_string_view<detail::underlying_char_t<Str0>>> {
 	using Char = detail::underlying_char_t<Str0>;
+	static_assert(detail::is_valid_char_v<Char>);
 	return detail::impl_split_string<Char, std::basic_string_view<Char>>(str, delimiters);
 }
 
@@ -885,6 +925,7 @@ auto prc::split_string_to_lines(
 	const Str& str
 ) -> std::vector<std::basic_string<detail::underlying_char_t<Str>>> {
 	using Char = detail::underlying_char_t<Str>;
+	static_assert(detail::is_valid_char_v<Char>);
 	return split_string(str, detail::linebreaks<Char>());
 }
 
@@ -939,7 +980,9 @@ template <typename Str0>
 auto prc::trim_string_to_view(
 	const Str0& str
 ) noexcept -> std::basic_string_view<detail::underlying_char_t<Str0>> {
-	return trim_string_to_view(str, detail::default_trim_chars < detail::underlying_char_t<Str0>> ());
+	using Char = detail::underlying_char_t<Str0>;
+	static_assert(detail::is_valid_char_v<Char>);
+	return trim_string_to_view(str, detail::default_trim_chars<Char> ());
 }
 
  template <typename Str0, typename Str1>
@@ -948,6 +991,7 @@ auto prc::trim_string_to_view(
 	const Str1& trim_chars
 ) noexcept -> std::basic_string_view<detail::underlying_char_t<Str0>> {
 	using Char = detail::underlying_char_t<Str0>;
+	static_assert(detail::is_valid_char_v<Char>);
 	const auto trim_chars_sv = std::basic_string_view<Char>{ trim_chars };
 	auto sv = std::basic_string_view<Char>{ str };
 	if (sv.empty() || trim_chars_sv.empty()) {
@@ -969,13 +1013,15 @@ auto prc::trim_string_to_view(
 template<typename Str0>
 auto prc::is_trimmed(const Str0& str) noexcept -> bool {
 	using Char = detail::underlying_char_t<Str0>;
+	static_assert(detail::is_valid_char_v<Char>);
 	const auto sv = std::basic_string_view<Char>{ str };
-	return is_trimmed(str, detail::default_trim_chars<detail::underlying_char_t<Str0>>());
+	return is_trimmed(str, detail::default_trim_chars<Char>());
 }
 
 template<typename Str0, typename Str1>
 auto prc::is_trimmed(const Str0& str, const Str1& trim_chars) noexcept -> bool {
 	using Char = detail::underlying_char_t<Str0>;
+	static_assert(detail::is_valid_char_v<Char>);
 	const auto sv = std::basic_string_view<Char>{ str };
 	constexpr auto npos = std::basic_string_view<Char>::npos;
 	return
@@ -1077,7 +1123,7 @@ auto replace_string_part(
 
 // This function replaces string of equal size
 template <typename Char, typename FindFunc>
-[[nodiscard]] PRECOOKED_INLINE auto impl_replace_all_equal_key_length(
+[[nodiscard]] auto impl_replace_all_equal_key_length(
 	std::basic_string<Char> haystack, 
 	const std::basic_string_view<Char> needle,
 	const std::basic_string_view<Char> replacement,
@@ -1099,7 +1145,7 @@ template <typename Char, typename FindFunc>
 // This function modifies the string in-place.
 // Requires replacement to be smaller than needle.
 template <typename Char, typename FindFunc>
-[[nodiscard]] PRECOOKED_INLINE auto impl_replace_all_shrink_string(
+[[nodiscard]] auto impl_replace_all_shrink_string(
 	std::basic_string<Char> haystack,
 	const std::basic_string_view<Char> needle,
 	const std::basic_string_view<Char> replacement,
@@ -1136,30 +1182,50 @@ template <typename Char, typename FindFunc>
 	return haystack;
 }
 
+
+template <typename Char, typename FindFunc>
+[[nodiscard]] auto calculate_num_occurances(
+	const std::basic_string_view<Char>& haystack,
+	const std::basic_string_view<Char>& needle,
+	const size_t start_offset,
+	const FindFunc& find_func
+) noexcept -> size_t {
+	PRECOOKED_ASSERT(needle.size() <= haystack.size());
+	auto num_occurances = size_t{ 0 };
+	const auto i_start = find_func(haystack, needle, start_offset);
+	const auto i_end = haystack.size();
+	for (
+		auto i = i_start;
+		i < i_end;
+		i = find_func(haystack, needle, i + needle.size())
+	) {
+		++num_occurances;
+	}
+	return num_occurances;
+}
+
 // This function builds a new string.
 // Required if replacement is larger then needle or the source is a string_view.
 template <typename Char, typename FindFunc>
-[[nodiscard]] PRECOOKED_INLINE auto impl_replace_all_rebuild_string(
+[[nodiscard]] auto impl_replace_all_rebuild_string(
 	const std::basic_string_view<Char>& haystack,
 	const std::basic_string_view<Char>& needle,
 	const std::basic_string_view<Char>& replacement,
 	const FindFunc& find_func
 ) -> std::basic_string<Char> {
-
+	PRECOOKED_ASSERT(!needle.empty());
+	PRECOOKED_ASSERT(needle.size() <= haystack.size());
 	const auto first_match = std::min(find_func(haystack, needle, 0), haystack.size());
 	if (first_match >= haystack.size()) {
 		return std::basic_string<Char>{ haystack };
 	}
 	const auto calculate_num_occurances_f = [&]() noexcept {
-		auto num_occurances = size_t{ 0 };
-		for (
-			auto i = first_match + needle.size(), i_end = haystack.size();
-			i < i_end; 
-			i = find_func(haystack, needle, i + needle.size())
-		) {
-			++num_occurances;
-		}
-		return num_occurances;
+		return calculate_num_occurances(
+			haystack, 
+			needle, 
+			first_match + needle.size(), 
+			find_func
+		) + 1; // first_match indicates one occurances
 	};
 	const auto target_size =
 		needle.size() < replacement.size() ? haystack.size() + (replacement.size() - needle.size()) * calculate_num_occurances_f() :
@@ -1196,8 +1262,9 @@ auto prc::replace_all(std::basic_string<Char> haystack, const Str0& needle, cons
 	const auto needle_sv = std::basic_string_view<Char>{ needle };
 	const auto replacement_sv = std::basic_string_view<Char>{ replacement };
 	const auto& find_func = detail::find_case_sensitive_func;
+	const auto no_replacement_possible = needle_sv.empty() || needle_sv.size() > haystack_sv.size();
 	return
-		(needle_sv.empty() || needle_sv.size() > haystack_sv.size()) ? haystack :
+		no_replacement_possible ? haystack :
 		needle_sv.length() == replacement_sv.length() ? detail::impl_replace_all_equal_key_length(std::move(haystack), needle_sv, replacement_sv, find_func) :
 		replacement_sv.length() < needle_sv.length() ? detail::impl_replace_all_shrink_string(std::move(haystack), needle_sv, replacement_sv, find_func) :
 		detail::impl_replace_all_rebuild_string<Char>(haystack, needle_sv, replacement_sv, find_func);
@@ -1207,11 +1274,14 @@ auto prc::replace_all(std::basic_string<Char> haystack, const Str0& needle, cons
 template <typename Str0, typename Str1, typename Str2>
 auto prc::replace_all(const Str0& haystack, const Str1& needle, const Str2& replacement) -> std::basic_string<detail::underlying_char_t<Str0>> {
 	using Char = detail::underlying_char_t<Str0>;
+	static_assert(detail::is_valid_char_v<Char>);
+
 	const auto haystack_sv = std::basic_string_view<Char>{ haystack };
 	const auto needle_sv = std::basic_string_view<Char>{ needle };
 	const auto replacement_sv = std::basic_string_view<Char>{ replacement };
 	const auto& find_func = detail::find_case_sensitive_func;
-	return (needle_sv.empty() || needle_sv.size() > haystack_sv.size()) ?
+	const auto no_replacement_possible = needle_sv.empty() || needle_sv.size() > haystack_sv.size();
+	return no_replacement_possible ?
 		std::basic_string<Char>{ haystack_sv } :
 		detail::impl_replace_all_rebuild_string(haystack_sv, needle_sv, replacement_sv, find_func);
 }
@@ -1219,12 +1289,14 @@ auto prc::replace_all(const Str0& haystack, const Str1& needle, const Str2& repl
 
 template <typename Char, typename Str0, typename Str1>
 auto prc::replace_all_ignore_case(std::basic_string<Char> haystack, const Str0& needle, const Str1& replacement) -> std::basic_string<Char> {
+	static_assert(detail::is_valid_char_v<Char>);
 	const auto haystack_sv = std::basic_string_view<Char>{ haystack };
 	const auto needle_sv = std::basic_string_view<Char>{ needle };
 	const auto replacement_sv = std::basic_string_view<Char>{ replacement };
 	const auto& find_func = detail::impl_find_ignore_case<Char>;
+	const auto no_replacement_possible = needle_sv.empty() || needle_sv.size() > haystack_sv.size();
 	return
-		(needle_sv.empty() || needle_sv.size() > haystack_sv.size()) ? haystack :
+		no_replacement_possible ? haystack :
 		needle_sv.length() == replacement_sv.length() ? detail::impl_replace_all_equal_key_length(std::move(haystack), needle_sv, replacement_sv, find_func) :
 		replacement_sv.length() < needle_sv.length() ? detail::impl_replace_all_shrink_string(std::move(haystack), needle_sv, replacement_sv, find_func) :
 		detail::impl_replace_all_rebuild_string<Char>(haystack, needle_sv, replacement_sv, find_func);
@@ -1233,11 +1305,13 @@ auto prc::replace_all_ignore_case(std::basic_string<Char> haystack, const Str0& 
 template <typename Str0, typename Str1, typename Str2>
 auto prc::replace_all_ignore_case(const Str0& haystack, const Str1& needle, const Str2& replacement) -> std::basic_string<detail::underlying_char_t<Str0>> {
 	using Char = detail::underlying_char_t<Str0>;
+	static_assert(detail::is_valid_char_v<Char>);
 	const auto haystack_sv = std::basic_string_view<Char>{ haystack };
 	const auto needle_sv = std::basic_string_view<Char>{ needle };
 	const auto replacement_sv = std::basic_string_view<Char>{ replacement };
 	const auto& find_func = detail::impl_find_ignore_case<Char>;
-	return (needle_sv.empty() || needle_sv.size() > haystack_sv.size()) ?
+	const auto no_replacement_possible = needle_sv.empty() || needle_sv.size() > haystack_sv.size();
+	return no_replacement_possible ?
 		std::basic_string<Char>{ haystack_sv } :
 		detail::impl_replace_all_rebuild_string(haystack_sv, needle_sv, replacement_sv, find_func);
 }
@@ -1274,6 +1348,7 @@ auto prc::to_lower(std::basic_string<Char> str) noexcept -> std::basic_string<Ch
 template <typename StrView> 
 auto prc::to_lower(const StrView& strview) -> std::basic_string<detail::underlying_char_t<StrView>> {
 	using Char = detail::underlying_char_t<StrView>;
+	static_assert(detail::is_valid_char_v<Char>);
 	const auto sv = std::basic_string_view<Char>{strview};
 	auto str = std::basic_string<Char>{};
 	str.reserve(sv.size());
@@ -1295,6 +1370,7 @@ auto prc::to_upper(std::basic_string<Char> str) noexcept -> std::basic_string<Ch
 template <typename StrView>
 auto prc::to_upper(const StrView& strview) -> std::basic_string<detail::underlying_char_t<StrView>> {
 	using Char = detail::underlying_char_t<StrView>;
+	static_assert(detail::is_valid_char_v<Char>);
 	const auto sv = std::basic_string_view<Char>{ strview };
 	auto str = std::basic_string<Char>{};
 	str.reserve(sv.size());
@@ -1316,6 +1392,7 @@ auto prc::is_equal_ignore_case(const Str0& a, const Str1& b) noexcept -> bool {
 template <typename Str0, typename Str1>
 auto prc::contains_substring(const Str0& haystack, const Str1& needle) noexcept -> bool {
 	using Char = detail::underlying_char_t<Str0>;
+	static_assert(detail::is_valid_char_v<Char>);
 	const auto haystack_sv = std::basic_string_view<Char>{ haystack };
 	return haystack_sv.find(needle) != std::string::npos;
 }
