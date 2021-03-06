@@ -22,141 +22,17 @@
 
 namespace {
 
-	template <typename T>
-	constexpr auto is_optional_v =
-		decltype(prc::detail::is_optional(std::declval<T>()))::value;
-
-	template <typename T>
-	constexpr auto is_variant_v = decltype(prc::detail::is_variant(std::declval<T>()))::value;
-
-	template <typename T>
-	constexpr auto is_smart_ptr_v = decltype(prc::detail::is_smart_ptr(std::declval<T>()))::value;
+	auto verify_type_traits() -> void {
 
 
-	template <typename Char>
-	constexpr auto is_valid_char() {
-		return
-			std::is_same_v<Char, char> ||
-			std::is_same_v<Char, wchar_t> ||
-			std::is_same_v<Char, char16_t> ||
-			std::is_same_v<Char, char32_t>;
-	}
-	template <typename Char>
-	using is_valid_char_t = decltype(is_valid_char<Char>);
-
-	template <typename Char>
-	using is_valid_char_v = typename is_valid_char_t<Char>::value;
-
-
-
-
-	template <typename T>
-	constexpr auto is_string() {
-		constexpr auto success =
-			std::is_same_v<T, std::basic_string<char>> ||
-			std::is_same_v<T, std::basic_string<wchar_t>> ||
-			std::is_same_v<T, std::basic_string<char16_t>> ||
-			std::is_same_v<T, std::basic_string<char32_t>> ||
-			std::is_same_v<T, std::basic_string_view<char>> ||
-			std::is_same_v<T, std::basic_string_view<wchar_t>> ||
-			std::is_same_v<T, std::basic_string_view<char16_t>> ||
-			std::is_same_v<T, std::basic_string_view<char32_t>> ||
-			std::is_same_v<T, const char*> ||
-			std::is_same_v<T, const wchar_t*> ||
-			std::is_same_v<T, const char16_t*> ||
-			std::is_same_v<T, const char32_t*>;
-		if constexpr (success) {
-			return std::true_type{};
-		}
-		else {
-			return std::false_type{};
-		}
-	}
-
-
-	template <typename C>
-	auto get_chars() {
-		using namespace std::string_view_literals;
-		if constexpr (std::is_same_v<C, char>) { return "abcdef"sv; }
-		else if constexpr (std::is_same_v<C, wchar_t>) { return L"abcdef"sv; }
-		else if constexpr (std::is_same_v<C, char16_t>) { return u"abcdef"sv; }
-		else if constexpr (std::is_same_v<C, char32_t>) { return U"abcdef"sv; }
-	}
-
-
-	template <typename C>
-	constexpr auto chars = std::basic_string_view<C>{ "abcdef" };
-
-
-
-
-	template <typename T>
-	constexpr auto to_char_func() {
-		if constexpr (std::is_pointer_v<T>) { return std::remove_pointer_t<T>{}; }
-		else if constexpr (std::is_array_v<T>) { return T{}[0]; }
-		else if constexpr (std::is_compound_v<T>) { return T{}[0]; }
-		else { return typename T::value_type{}; }
-	}
-
-	template <typename T>
-	struct CharClass {
-		using char_t = decltype(to_char_func<T>());
-	};
-
-	template <typename T>
-	using to_char_t = typename CharClass<T>::char_t;
-
-
-
-	template <typename Str>
-	auto foo(Str&& str, std::basic_string_view<to_char_t<Str>> delim = chars < to_char_t<Str>>) {
+		static_assert(prc::detail::is_container_v<std::vector<int>&&>);
+		static_assert(prc::detail::is_container_v<std::array<int, 3>>);
+		static_assert(prc::detail::is_container_v<std::string>);
+		static_assert(prc::detail::is_optional_v<std::optional<int>>);
 
 	}
 
-	auto test() {
 
-
-
-		static_assert(is_optional_v<std::optional<int>>);
-		static_assert(is_optional_v<std::optional<int>&>);
-		static_assert(is_optional_v<std::optional<int>&&>);
-		static_assert(is_optional_v<const std::optional<int>&&>);
-		static_assert(is_optional_v<const std::optional<int>&>);
-		static_assert(!is_optional_v<int>);
-
-		{
-			constexpr auto x = "abc";
-			using a = decltype(x);
-		}
-
-		{
-			foo(std::string{});
-			//foo(std::wstring{});
-
-			auto x = get_chars<wchar_t>();
-
-			auto str = std::string{ "abc" };
-			auto wstr = std::wstring{str.begin(), str.end()};
-
-		}
-
-		{
-			auto a = "abc";
-			auto b = std::string{ "abc" };
-			auto c = std::string_view{ "abc" };
-			using x = to_char_t<decltype(a)>;
-			static_assert(std::is_same_v<to_char_t<decltype(a)>, to_char_t<decltype(b)>>);
-			static_assert(std::is_same_v<to_char_t<decltype(b)>, to_char_t<decltype(c)>>);
-			static_assert(std::is_same_v<to_char_t<decltype(a)>, to_char_t<decltype(c)>>);
-		}
-
-		using namespace prc::detail;
-
-
-		prc::find_ignore_case("abc", "hej", 0);
-		//auto x = std::basic_string<char>{};
-		//f(x);
-	}
 
 }
 
@@ -673,6 +549,21 @@ TEST_CASE("to_string"){
 		"nullptr"
 	);
 
+	enum class Enum { A = 0, B = 7};
+	REQUIRE(
+		prc::to_string(Enum::A) ==
+		"0"
+	);
+	REQUIRE(
+		prc::to_string(Enum::B) ==
+		"7"
+	);
+
+	;
+	REQUIRE(
+		prc::to_string(std::chrono::seconds{ 1 }) ==
+		"1"
+	);
 };
 
 

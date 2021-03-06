@@ -87,7 +87,7 @@ template <typename T> [[nodiscard]] auto number_to_string(const T& number) -> st
 template <typename T> [[nodiscard]] auto to_string(const T& val) -> std::string;
 
 // IO - Read files
-[[nodiscard]] PRECOOKED_INLINE auto read_file_to_string(const std::filesystem::path& filepath) -> std::string;
+template <typename Char = char> [[nodiscard]] auto read_file_to_string(const std::filesystem::path& filepath) -> std::basic_string<Char>;
 template <typename T> [[nodiscard]] auto read_file_to_vector(const std::filesystem::path& filepath) -> std::vector<T>;
 
 // IO - Write files
@@ -304,7 +304,7 @@ private:
 #include <tuple>
 
 namespace prc::detail::introspection {
-	// See http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2015/n4502.pdf.
+	// Taken from http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2015/n4502.pdf
 	template <typename...>
 	using void_t = void;
 	// Primary template handles all types not supporting the operation.
@@ -319,35 +319,48 @@ namespace prc::detail {
 	template <typename T>
 	using is_container_t = decltype(std::declval<const T&>().begin(), std::declval<const T&>().end());
 	template <typename T>
-	using is_container = introspection::detect<T, is_container_t>;
+	constexpr auto is_container_v = introspection::detect<T, is_container_t>::value;
 
 	template <typename T>
 	using has_ostream_t = decltype(std::declval<std::ostream&>() << std::declval<T>());
 	template <typename T>
-	using has_ostream = introspection::detect<T, has_ostream_t>;
+	constexpr auto has_ostream_v = introspection::detect<T, has_ostream_t>::value;
 
 	template <typename T>
 	using is_tuple_t = decltype(std::tuple_size<T>::value);
 	template <typename T>
-	using is_tuple = introspection::detect<T, is_tuple_t>;
+	constexpr auto is_tuple_v = introspection::detect<T, is_tuple_t>::value;
 
 
-	template <typename T> constexpr auto is_smart_ptr(const std::unique_ptr<T>&) { return std::true_type{}; }
-	template <typename T> constexpr auto is_smart_ptr(const std::shared_ptr<T>&) { return std::true_type{}; }
-	template <typename T> constexpr auto is_smart_ptr(const T&) { return std::false_type{}; }
+	template <typename T> constexpr auto is_smart_ptr_f(const std::unique_ptr<T>&) { return std::true_type{}; }
+	template <typename T> constexpr auto is_smart_ptr_f(const std::shared_ptr<T>&) { return std::true_type{}; }
+	template <typename T> constexpr auto is_smart_ptr_f(const T&) { return std::false_type{}; }
 	template <typename T>
-	constexpr auto is_smart_ptr_v = decltype(prc::detail::is_smart_ptr(std::declval<T>()))::value;
+	constexpr auto is_smart_ptr_v = decltype(prc::detail::is_smart_ptr_f(std::declval<T>()))::value;
 
-	template <typename ...Ts> constexpr auto is_variant(const std::variant<Ts...>&) { return std::true_type{}; }
-	template <typename T> constexpr auto is_variant(const T&) { return std::false_type{}; }
+	template <typename ...Ts> constexpr auto is_variant_f(const std::variant<Ts...>&) { return std::true_type{}; }
+	template <typename T> constexpr auto is_variant_f(const T&) { return std::false_type{}; }
 	template <typename T>
-	constexpr auto is_variant_v = decltype(prc::detail::is_variant(std::declval<T>()))::value;
+	constexpr auto is_variant_v = decltype(prc::detail::is_variant_f(std::declval<T>()))::value;
 
-	template <typename T> constexpr auto is_optional(const std::optional<T>&) { return std::true_type{}; }
-	template <typename T> constexpr auto is_optional(const T&) { return std::false_type{}; }
+	template <typename T> constexpr auto is_optional_f(const std::optional<T>&) { return std::true_type{}; }
+	template <typename T> constexpr auto is_optional_f(const T&) { return std::false_type{}; }
 	template <typename T>
-	constexpr auto is_optional_v =
-		decltype(prc::detail::is_optional(std::declval<T>()))::value;
+	constexpr auto is_optional_v = decltype(prc::detail::is_optional_f(std::declval<T>()))::value;
+
+
+	template <typename T, typename Y> constexpr auto is_duration_f(const std::chrono::duration<T, Y>&) { return std::true_type{}; }
+	template <typename T> constexpr auto is_duration_f(const T&) { return std::false_type{}; }
+	template <typename T>
+	constexpr auto is_duration_v = decltype(prc::detail::is_duration_f(std::declval<T>()))::value;
+
+	template <typename Char>
+	constexpr auto is_valid_char_v = std::bool_constant<
+		std::is_same_v<Char, char> ||
+		std::is_same_v<Char, wchar_t> ||
+		std::is_same_v<Char, char16_t> ||
+		std::is_same_v<Char, char32_t>
+	>::value;
 
 }
 
@@ -429,7 +442,7 @@ auto prc::type_name(T&&) -> std::string { return typeid(T).name(); }
 template <typename T>
 auto prc::held_type_name(const T& value) -> std::string {
 	using value_t = std::decay_t<T>;
-	if constexpr (std::is_same_v<decltype(detail::is_variant(value)), std::true_type>) {
+	if constexpr (detail::is_variant_v<T>) {
 		if (value.valueless_by_exception()) {
 			return "variant valueless by exception";
 		}
@@ -523,12 +536,12 @@ auto prc::to_string(const T& value) -> std::string {
 	else if constexpr (std::is_base_of_v<std::exception, value_t>) {
 		return value.what();
 	}
-	else if constexpr (detail::has_ostream<value_t>::value) {
+	else if constexpr (detail::has_ostream_v<value_t>) {
 		auto sstr = std::ostringstream{};
 		sstr << value;
 		return sstr.str();
 	}
-	else if constexpr (detail::is_container<value_t>::value) {
+	else if constexpr (detail::is_container_v<value_t>) {
 		auto str = std::string{};
 		str.reserve(value.size() * 4); // Guess
 		str += '[';
@@ -544,7 +557,7 @@ auto prc::to_string(const T& value) -> std::string {
 		}
 		return str;
 	}
-	else if constexpr(detail::is_tuple<value_t>::value){
+	else if constexpr(detail::is_tuple_v<value_t>){
 		auto str = std::string{};
 		str.reserve(std::tuple_size_v<value_t> * 4); // Guess
 		str += '[';
@@ -559,6 +572,13 @@ auto prc::to_string(const T& value) -> std::string {
 			str.back() = ']';
 		}
 		return str;
+	}
+	else if constexpr (std::is_enum_v<T>) {
+		using underlying_type = typename std::underlying_type<T>::type;
+		return to_string(static_cast<underlying_type>(value));
+	}
+	else if constexpr (detail::is_duration_v<T>) {
+		return to_string(value.count());
 	}
 	else {
 		return "unknown";
@@ -586,8 +606,12 @@ namespace prc::detail {
 
 [[nodiscard]] PRECOOKED_INLINE auto filesize_to_size_t(
 	uintmax_t filesize_uintmax
-) noexcept -> std::optional<size_t>;
-
+) noexcept ->std::optional<size_t> {
+	const auto file_size = static_cast<size_t>(filesize_uintmax);
+	return static_cast<uintmax_t>(file_size) == filesize_uintmax ?
+		file_size :
+		std::optional<size_t>{};
+}
 
 template <typename Container>
 [[nodiscard]] auto impl_read_file_to_container(const std::filesystem::path& filepath) -> Container {
@@ -605,8 +629,10 @@ template <typename Container>
 		throw detail::exceptions::file_too_large_exception(filepath, file_size_uintmax);
 	}
 	const auto file_size = *file_size_optional;
-	const auto element_size = sizeof(value_t);
-	if (!(file_size % element_size) == 0) {
+	constexpr auto element_size = sizeof(value_t);
+	static_assert(element_size > 0);
+	const auto is_valid_size = (file_size % element_size) == 0;
+	if (!is_valid_size) {
 		throw detail::exceptions::filesize_not_compatible_with_typesize_exception(
 			filepath, 
 			file_size,
@@ -614,33 +640,26 @@ template <typename Container>
 			type_name<value_t>()
 		);
 	}
+	auto data = Container{};
+	const auto num_elements = file_size / element_size;
+	data.resize(num_elements);
 	auto file_stream = std::ifstream{ filepath, std::ios::binary };
 	if (!file_stream.is_open()) {
 		throw detail::exceptions::read_file_exception(filepath);
 	}
 	const auto scope_exit = detail::scope_exit{ [&file_stream]() {
+		PRECOOKED_ASSERT(file_stream.is_open());
 		file_stream.close();
+		PRECOOKED_ASSERT(!file_stream.is_open());
 	} };
-	auto data = Container{};
-	const auto num_elements = file_size / element_size;
-	data.resize(num_elements);
 	file_stream.seekg(0, std::ios_base::beg);
 	if (file_size > 0) {
 		auto* ptr_char = reinterpret_cast<byte_t*>(data.data());
-		file_stream.read(ptr_char, file_size);
+		file_stream.read(ptr_char, file_size);	
 	}
 	return data;
 }
 
-
-
-template <typename Char>
-constexpr auto is_valid_char_v = std::bool_constant<
-	std::is_same_v<Char, char> ||
-	std::is_same_v<Char, wchar_t> ||
-	std::is_same_v<Char, char16_t> ||
-	std::is_same_v<Char, char32_t>
->::value;
 
 
 }
@@ -680,11 +699,12 @@ template <typename Strings, typename Char>
 	if (strings.empty()) {
 		return {};
 	}
-	const auto target_size =
+	const auto target_size_strings =
 		std::accumulate(strings.begin(), strings.end(), size_t{ 0 }, [](size_t sum, const auto& str) {
 			return sum + str.size();
-		})
-		+ (strings.size() - 1) * delimiter.size();
+		});
+	const auto target_size_delimiters = (strings.size() - 1) * delimiter.size();
+	const auto target_size = target_size_strings + target_size_delimiters;
 	// Merge strings
 	auto joined = std::basic_string<Char>{};
 	joined.reserve(target_size);
@@ -708,11 +728,13 @@ template <typename Strings, typename Char>
 template <typename Strings, typename Str>
 auto prc::join_strings(const Strings& strings, const Str& delimiter) -> std::basic_string<detail::underlying_char_t<Str>> {
 	using Char = detail::underlying_char_t<Str>;
+	static_assert(detail::is_valid_char_v<Char>);
 	return detail::impl_join_strings(strings, std::basic_string_view<Char>{delimiter});
 }
 
 template <typename Strings, typename Char>
 auto prc::join_strings(const Strings& strings) -> std::basic_string<Char> {
+	static_assert(detail::is_valid_char_v<Char>);
 	return detail::impl_join_strings(strings, std::basic_string_view<Char>{});
 }
 
@@ -800,14 +822,6 @@ auto prc::join_strings(const Strings& strings) -> std::basic_string<Char> {
 #include <algorithm>
 
 
-auto prc::detail::filesize_to_size_t(
-	uintmax_t filesize_uintmax
-) noexcept ->std::optional<size_t>{
-	const auto file_size = static_cast<size_t>(filesize_uintmax);
-	return static_cast<uintmax_t>(file_size) == filesize_uintmax ?
-		file_size :
-		std::optional<size_t>{};
-}
 
 
 
@@ -1275,7 +1289,6 @@ template <typename Str0, typename Str1, typename Str2>
 auto prc::replace_all(const Str0& haystack, const Str1& needle, const Str2& replacement) -> std::basic_string<detail::underlying_char_t<Str0>> {
 	using Char = detail::underlying_char_t<Str0>;
 	static_assert(detail::is_valid_char_v<Char>);
-
 	const auto haystack_sv = std::basic_string_view<Char>{ haystack };
 	const auto needle_sv = std::basic_string_view<Char>{ needle };
 	const auto replacement_sv = std::basic_string_view<Char>{ replacement };
@@ -1299,7 +1312,7 @@ auto prc::replace_all_ignore_case(std::basic_string<Char> haystack, const Str0& 
 		no_replacement_possible ? haystack :
 		needle_sv.length() == replacement_sv.length() ? detail::impl_replace_all_equal_key_length(std::move(haystack), needle_sv, replacement_sv, find_func) :
 		replacement_sv.length() < needle_sv.length() ? detail::impl_replace_all_shrink_string(std::move(haystack), needle_sv, replacement_sv, find_func) :
-		detail::impl_replace_all_rebuild_string<Char>(haystack, needle_sv, replacement_sv, find_func);
+		detail::impl_replace_all_rebuild_string<Char>(haystack_sv, needle_sv, replacement_sv, find_func);
 }
 
 template <typename Str0, typename Str1, typename Str2>
@@ -1410,6 +1423,7 @@ auto prc::find_ignore_case(
 	const size_t offset
 ) noexcept -> size_t {
 	using Char = detail::underlying_char_t<Str0>;
+	static_assert(detail::is_valid_char_v<Char>);
 	const auto haystack_sv = std::basic_string_view<Char>{ haystack };
 	const auto needle_sv = std::basic_string_view<Char>{ needle };
 	if (haystack_sv.size() < needle_sv.size() || needle_sv.empty()) {
@@ -1436,8 +1450,10 @@ auto prc::find_ignore_case(
 
 
 // Read files
-auto prc::read_file_to_string(const std::filesystem::path& filepath) -> std::string {
-	return detail::impl_read_file_to_container<std::string>(filepath);
+template <typename Char>
+auto prc::read_file_to_string(const std::filesystem::path& filepath) -> std::basic_string<Char> {
+	using string_t = std::basic_string<Char>;
+	return detail::impl_read_file_to_container<string_t>(filepath);
 }
 
 
