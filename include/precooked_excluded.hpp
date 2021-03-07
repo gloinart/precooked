@@ -32,7 +32,7 @@ auto prc::is_vector_equal_to_file_content(
 	const auto file_size_uintmax = std::filesystem::file_size(filepath);
 	const auto file_size_optional = detail::filesize_to_size_t(file_size_uintmax);
 	if (!file_size_optional.has_value()) {
-		throw detail::exceptions::file_too_large_exception(filepath, file_size_uintmax);
+		throw prc::exceptions::file_too_large_exception(filepath, file_size_uintmax);
 	}
 	const auto file_size = *file_size_optional;
 	if (file_size != byteview.size()) {
@@ -41,7 +41,7 @@ auto prc::is_vector_equal_to_file_content(
 	auto buffer = std::vector<detail::byte_view::byte_t>{};
 	auto file_stream = std::ifstream{ filepath, std::ios::binary };
 	if (!file_stream.is_open()) {
-		throw detail::exceptions::read_file_exception(filepath);
+		throw prc::exceptions::read_file_exception(filepath);
 	}
 	const auto scope_exit = detail::scope_exit{ [&file_stream]() {
 		file_stream.close();

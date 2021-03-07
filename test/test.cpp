@@ -25,10 +25,24 @@ namespace {
 	auto verify_type_traits() -> void {
 
 
-		static_assert(prc::detail::is_container_v<std::vector<int>&&>);
-		static_assert(prc::detail::is_container_v<std::array<int, 3>>);
-		static_assert(prc::detail::is_container_v<std::string>);
-		static_assert(prc::detail::is_optional_v<std::optional<int>>);
+		static_assert(prc::type_traits::is_container_v<std::vector<int>&&>);
+		static_assert(prc::type_traits::is_container_v<std::array<int, 3>>);
+		static_assert(prc::type_traits::is_container_v<std::string>);
+		static_assert(prc::type_traits::is_optional_v<std::optional<int>>);
+
+
+		static_assert(prc::type_traits::is_string_v<std::wstring>);
+		static_assert(prc::type_traits::is_string_v<std::basic_string_view<char>>);
+		static_assert(prc::type_traits::is_string_v<std::basic_string_view<wchar_t>>);
+		static_assert(prc::type_traits::is_string_v<std::basic_string_view<char32_t>>);
+		static_assert(prc::type_traits::is_string_v<std::basic_string_view<char16_t>>);
+		static_assert(prc::type_traits::is_string_v<std::basic_string<char>>);
+		static_assert(prc::type_traits::is_string_v<std::basic_string<wchar_t>>);
+		static_assert(prc::type_traits::is_string_v<std::basic_string<char32_t>>);
+		static_assert(prc::type_traits::is_string_v<std::basic_string<char16_t>>);
+		static_assert(!prc::type_traits::is_string_v<int>);
+
+		static_assert(!prc::type_traits::is_duration_v<int>);
 
 	}
 
@@ -69,17 +83,37 @@ TEST_CASE("file_to_string"){
 	namespace fs = std::filesystem;
 	auto tmpdir = fs::temp_directory_path();
 	auto tmpfile = tmpdir / "test.txt";
-	auto content = std::string{ "abcdefg" };
-	prc::write_string_to_file(content, tmpfile);
-	REQUIRE(fs::exists(tmpfile));
-	auto back = prc::read_file_to_string(tmpfile);
-	REQUIRE(back == content);
+	{
+		auto content = std::string{ "abcdefgh" };
+		prc::write_string_to_file(content, tmpfile);
+		REQUIRE(fs::exists(tmpfile));
+		auto back = prc::read_file_to_string(tmpfile);
+		REQUIRE(back == content);
+
+
+		{
+			prc::write_string_to_file("abc", tmpfile);
+			prc::write_string_to_file(u"abc", tmpfile);
+			prc::write_string_to_file(U"abc", tmpfile);
+		}
+	}
 
 
 	{
-		prc::write_string_to_file("abc", tmpfile);
-		prc::write_string_to_file(u"abc", tmpfile);
-		prc::write_string_to_file(U"abc", tmpfile);
+		auto content = std::wstring{ L"abcdefgh" };
+		prc::write_string_to_file(content, tmpfile);
+		REQUIRE(fs::exists(tmpfile));
+		auto back = prc::read_file_to_string<wchar_t>(tmpfile);
+		REQUIRE(back == content);
+	}
+
+	{
+		auto content = std::string{ "abcdefg" };
+		prc::write_string_to_file(content, tmpfile);
+		REQUIRE(fs::exists(tmpfile));
+		REQUIRE_THROWS(
+			prc::read_file_to_string<wchar_t>(tmpfile)
+		);
 
 	}
 }
@@ -485,11 +519,11 @@ TEST_CASE("join_string"){
 
 
 // To string containers and tuples
-TEST_CASE("to_string"){
+TEST_CASE("as_string"){
 
-	REQUIRE(prc::to_string("abc") == "abc");
-	REQUIRE(prc::to_string(5) == "5");
-	REQUIRE(prc::to_string(false) == "false");
+	REQUIRE(prc::as_string("abc") == "abc");
+	REQUIRE(prc::as_string(5) == "5");
+	REQUIRE(prc::as_string(false) == "false");
 
 
 	using map_t = std::map<int, std::string>;
@@ -498,75 +532,117 @@ TEST_CASE("to_string"){
 		{33, "three-three"},
 	};
 	REQUIRE(
-		prc::to_string(map) ==
+		prc::as_string(map) ==
 		"[[21 two-one] [33 three-three]]"
 	);
 	REQUIRE(
-		prc::to_string(map_t{}) ==
+		prc::as_string(map_t{}) ==
 		"[]"
 	);
 	REQUIRE(
-		prc::to_string(std::vector<int>{}) ==
+		prc::as_string(std::vector<int>{}) ==
 		"[]"
 	);
 	REQUIRE(
-		prc::to_string(std::make_tuple(31, 41, 51)) ==
+		prc::as_string(std::make_tuple(31, 41, 51)) ==
 		"[31 41 51]"
 	);
 	REQUIRE(
-		prc::to_string(std::array{ 31, 41, 51 }) ==
+		prc::as_string(std::array{ 31, 41, 51 }) ==
 		"[31 41 51]"
 	);
 	REQUIRE(
-		prc::to_string(std::vector<int>{ 31, 41, 51 }) ==
+		prc::as_string(std::vector<int>{ 31, 41, 51 }) ==
 		"[31 41 51]"
 	);
 	REQUIRE(
-		prc::to_string(std::make_pair(6, 7)) ==
+		prc::as_string(std::make_pair(6, 7)) ==
 		"[6 7]"
 	);
 	REQUIRE(
-		prc::to_string(std::optional<int>{}) ==
+		prc::as_string(std::optional<int>{}) ==
 		"std::nullopt"
 	);
 	REQUIRE(
-		prc::to_string(std::variant<int, float, std::string>{std::string{ "hej" }}) ==
-		prc::to_string(std::string{ "hej" })
+		prc::as_string(std::variant<int, float, std::string>{std::string{ "hej" }}) ==
+		prc::as_string(std::string{ "hej" })
 	);
 
 	REQUIRE(
-		prc::to_string(std::make_shared<std::string>("hej")) ==
+		prc::as_string(std::make_shared<std::string>("hej")) ==
 		"hej"
 	);
 
 	REQUIRE(
-		prc::to_string(std::shared_ptr<std::string>{}) ==
+		prc::as_string(std::shared_ptr<std::string>{}) ==
 		"nullptr"
 	);
 
 	REQUIRE(
-		prc::to_string(std::unique_ptr<std::string>{}) ==
+		prc::as_string(std::unique_ptr<std::string>{}) ==
 		"nullptr"
 	);
 
 	enum class Enum { A = 0, B = 7};
 	REQUIRE(
-		prc::to_string(Enum::A) ==
+		prc::as_string(Enum::A) ==
 		"0"
 	);
 	REQUIRE(
-		prc::to_string(Enum::B) ==
+		prc::as_string(Enum::B) ==
 		"7"
 	);
 
 	;
 	REQUIRE(
-		prc::to_string(std::chrono::seconds{ 1 }) ==
+		prc::as_string(std::chrono::seconds{ 1 }) ==
 		"1"
+	);
+
+
+	REQUIRE(
+		prc::as_string(std::chrono::milliseconds{ 1 }) ==
+		"1"
+	);
+
+
+	REQUIRE(
+		prc::as_string(std::wstring{ L"abc" }) ==
+		"abc"
+	);
+
+
+	struct dummy_t {
+		uint8_t a = 10;
+		uint8_t b = 11;
+		uint8_t c = 12;
+		uint8_t d = 13;
+	};
+	REQUIRE(
+		prc::as_string(dummy_t{}) ==
+		"unknown 0x0a0b0c0d"
 	);
 };
 
+TEST_CASE("detail::uint8_to_hexstring") {
+	auto to_hex_sstr = [](const int value) {
+		auto sstr = std::stringstream{};
+		sstr << std::hex << value;
+		const auto str = sstr.str();
+		PRECOOKED_ASSERT(str.size() == 1 || str.size() == 2);
+		return str.size() == 1 ?
+			"0" + str :
+			str;
+	};
 
+	for (int v = 0; v < 256; ++v) {
+		REQUIRE(
+			to_hex_sstr(v) == 
+			prc::detail::uint8_to_hexstring(static_cast<uint8_t>(v))
+		);
+	}
+
+}
 
 
 
