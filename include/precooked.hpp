@@ -11,7 +11,7 @@
 		#define PRECOOKED_ASSERT(x) for(;false;) { [[maybe_unused]] auto result = (x); }
 	#else
 		#include <cassert>
-		#define PRECOOKED_ASSERT(x) assert(x);
+		#define PRECOOKED_ASSERT(x) assert(x)
 	#endif
 #endif
 #include <string>
@@ -19,9 +19,7 @@
 #include <vector>
 #include <filesystem>
 #include <optional>
-namespace prc::detail {
-	class byte_view;
-}
+namespace prc::detail { class byte_view; }
 namespace prc::type_traits {
 template <typename T> constexpr auto underlying_char_f() {
 	if constexpr (std::is_pointer_v<T>) { return std::remove_pointer_t<T>{}; }
@@ -94,11 +92,13 @@ template <typename T> [[nodiscard]] auto number_to_string(const T& number) -> st
 [[nodiscard]] PRECOOKED_INLINE auto subdirs_in_directory_tree(const std::filesystem::path& dir) -> std::vector<std::filesystem::path>;
 
 
-// Convenience
+// Convenience - tuple iteration
 template <typename Tpl, typename Func>
 auto tuple_for_each(Tpl&& tpl, Func&& func) -> void;
 template <typename Tpl, typename Func>
 [[nodiscard]] auto tuple_any_of(const Tpl& tpl, const Func& func) -> bool;
+
+
 template <typename DstType, typename SrcType>
 [[nodiscard]] auto cast(const SrcType& src_type)->DstType;
 
@@ -146,8 +146,13 @@ template <typename T> [[nodiscard]] auto held_type_name(const T& value) -> std::
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
-
-
+#if __cplusplus >= 201803
+	#define PRECOOKED_UNLIKELY [[unlikely]]
+	#define PRECOOKED_LIKELY [[likely]]
+#else
+	#define PRECOOKED_UNLIKELY
+	#define PRECOOKED_LIKELY
+#endif
 
 #include <type_traits>
 
@@ -202,6 +207,28 @@ private:
 };
 }
 
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+
+namespace prc::detail {
+template <typename ...Ts>
+[[nodiscard]] auto join_tuple_of_strings(const std::tuple<Ts...>& tpl) -> std::string {
+	auto target_size = size_t{ 0 };
+	tuple_for_each(tpl, [&target_size](auto&& sv) {
+		target_size += std::string_view{ sv }.size();
+	});
+	auto str = std::string{};
+	str.reserve(target_size);
+	tuple_for_each(tpl, [&str](auto&& sv) {
+		str.append(sv);
+	});
+	PRECOOKED_ASSERT(str.size() == target_size);
+	return str;
+}
+}
+
+
 
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
@@ -217,16 +244,22 @@ class io_exception : public std::runtime_error {
 	using inherited = std::runtime_error;
 public:
 	io_exception(std::string msg, std::filesystem::path path)
-	: inherited{ msg + ": " + path.string() } {}
+	: inherited{ msg + ": " + path.string() } 
+	{}
 };
 
 
 class filesize_not_compatible_with_typesize_exception : public io_exception {
 public:
-	filesize_not_compatible_with_typesize_exception(std::filesystem::path path, size_t filesize, size_t element_size, const std::string& type_name)
-	: io_exception{ 
+	filesize_not_compatible_with_typesize_exception(
+		std::filesystem::path path, 
+		size_t filesize, 
+		size_t element_size, 
+		const std::string& type_name
+	) : io_exception{ 
 		"filesize " + std::to_string(filesize) + " not aligned with element size: " + std::to_string(element_size) + "[type:" + type_name + "]",
-		std::move(path) } 
+		std::move(path) 
+	} 
 	{}
 };
 
@@ -331,6 +364,11 @@ namespace prc::type_traits {
 	template <typename T>
 	constexpr auto is_smart_ptr_v = decltype(is_smart_ptr_f(std::declval<T>()))::value;
 
+	template <typename T> constexpr auto is_weak_ptr_f(const std::weak_ptr<T>&) { return std::true_type{}; }
+	template <typename T> constexpr auto is_weak_ptr_f(const T&) { return std::false_type{}; }
+	template <typename T>
+	constexpr auto is_weak_ptr_v = decltype(is_weak_ptr_f(std::declval<T>()))::value;
+
 	template <typename ...Ts> constexpr auto is_variant_f(const std::variant<Ts...>&) { return std::true_type{}; }
 	template <typename T> constexpr auto is_variant_f(const T&) { return std::false_type{}; }
 	template <typename T>
@@ -340,7 +378,6 @@ namespace prc::type_traits {
 	template <typename T> constexpr auto is_optional_f(const T&) { return std::false_type{}; }
 	template <typename T>
 	constexpr auto is_optional_v = decltype(is_optional_f(std::declval<T>()))::value;
-
 
 	template <typename T, typename Y> constexpr auto is_duration_f(const std::chrono::duration<T, Y>&) { return std::true_type{}; }
 	template <typename T> constexpr auto is_duration_f(const T&) { return std::false_type{}; }
@@ -354,7 +391,6 @@ namespace prc::type_traits {
 		std::is_same_v<Char, char16_t> ||
 		std::is_same_v<Char, char32_t>
 	>::value;
-
 
 	template <typename Char> constexpr auto is_string_f(const std::basic_string<Char>&) { return std::true_type{}; }
 	template <typename Char> constexpr auto is_string_f(const std::basic_string_view<Char>&) { return std::true_type{}; }
@@ -376,6 +412,13 @@ namespace prc::type_traits {
 namespace prc::detail {
 template<typename Tpl, typename Func, size_t Idx = 0>
 auto impl_tuple_for_each(Tpl& tpl, Func&& func) -> void {
+	if constexpr (Idx < std::tuple_size_v<Tpl>) {
+		func(std::get<Idx>(tpl));
+		impl_tuple_for_each<Tpl, Func, Idx + 1>(tpl, std::forward<Func>(func));
+	}
+}
+template<typename Tpl, typename Func, size_t Idx = 0>
+auto impl_tuple_for_each(const Tpl& tpl, Func&& func) -> void {
 	if constexpr (Idx < std::tuple_size_v<Tpl>) {
 		func(std::get<Idx>(tpl));
 		impl_tuple_for_each<Tpl, Func, Idx + 1>(tpl, std::forward<Func>(func));
@@ -408,10 +451,15 @@ template <typename DstType, typename SrcType>
 auto prc::cast(const SrcType& src)->DstType {
 	const auto casted = static_cast<DstType>(src);
 	const auto casted_back = static_cast<SrcType>(casted);
-	if (casted_back != src) {
-		throw prc::exceptions::bad_cast_exception{
-			std::string{ "bad cast from " } + type_name(src) + " to " + type_name(casted)
-		};
+	if (casted_back != src) PRECOOKED_UNLIKELY {
+		using namespace std::string_view_literals;
+		auto msg = detail::join_tuple_of_strings(std::make_tuple(
+			"bad cast from "sv,
+			type_name(src),
+			" to "sv,
+			type_name(casted)
+		));
+		throw prc::exceptions::bad_cast_exception{ std::move(msg) };
 	}
 	return casted;
 }
@@ -480,14 +528,15 @@ auto prc::string_to_number(const std::string_view str) noexcept -> std::optional
 	auto value = T{};
 	const auto* ptr_end = str.data() + str.size();
 	const auto result = std::from_chars(str.data(), ptr_end, value);
-	return 
-		result.ec != std::errc{} ? std::optional<T>{} :
-		result.ptr != ptr_end ? std::optional<T>{} :
-		value;
+	const auto success = 
+		result.ec == std::errc{} &&
+		result.ptr == ptr_end;
+	return success ? value : std::optional<T>{};
 }
 
 template <typename T> 
 auto prc::number_to_string(const T& number) -> std::string {
+	static_assert(std::is_arithmetic_v<T>, "T needs to be an arithmetic type");
 	return std::to_string(number);
 }
 
@@ -506,23 +555,29 @@ namespace prc::detail {
 		PRECOOKED_ASSERT(v < digits.size());
 		return digits[v];
 	};
-	auto str = std::string{};
-	str.resize(2);
-	str[0] = hex_digit_f(value / 16);
-	str[1] = hex_digit_f(value % 16);
-	return str;
+	return std::string{
+		hex_digit_f(value / 16),
+		hex_digit_f(value % 16)
+	};
 };
 }
 
 template <typename T>
 auto prc::as_string(const T& value) -> std::string {
 	using value_t = std::decay_t<T>;
-	if constexpr (type_traits::is_string_v<value_t>) {
+	using namespace std::string_literals;
+	if constexpr (std::is_same_v<std::string, value_t>) {
+		return value;
+	}
+	else if constexpr (std::is_same_v<std::string_view, value_t>) {
+		return std::string{ value };
+	}
+	else if constexpr (type_traits::is_string_v<value_t>) {
 		auto str = std::string{};
 		str.resize(value.size());
 		using src_char_t = type_traits::underlying_char_t<T>;
 		using dst_char_t = std::string::value_type;
-		auto truncate_to_char_t = [](const src_char_t& c) {
+		const auto truncate_to_char_t = [](const src_char_t& c) noexcept -> dst_char_t {
 			return c > std::numeric_limits<dst_char_t>::max() ?
 				'?' :
 				static_cast<dst_char_t>(c);
@@ -530,21 +585,28 @@ auto prc::as_string(const T& value) -> std::string {
 		std::transform(value.begin(), value.end(), str.begin(), truncate_to_char_t);
 		return str;
 	}
-	else if constexpr (std::is_same_v<std::string, value_t>) {
-		return value;
-	}
-	else if constexpr (std::is_same_v<std::string_view, value_t>) {
-		return std::string{ value };
-	}
 	else if constexpr (std::is_same_v<bool, value_t>) {
-		return value ? "true" : "false";
+		return value ? "true"s : "false"s;
 	}
 	else if constexpr (std::is_arithmetic_v<value_t>) {
 		return std::to_string(value);
 	}
 	else if constexpr (type_traits::is_smart_ptr_v<value_t>) {
 		return value == nullptr ? 
-			"nullptr" : 
+			"nullptr"s : 
+			as_string(*value);
+	}
+	else if constexpr (type_traits::is_weak_ptr_v<value_t>) {
+		return value.expired() ? 
+			"expired"s :
+			as_string(value.lock());
+	}
+	else if constexpr (
+		std::is_pointer_v<value_t> && 
+		!type_traits::is_valid_char_v<std::remove_pointer_t<value_t>>
+	) {
+		return value == nullptr ?
+			"nullptr"s :
 			as_string(*value);
 	}
 	else if constexpr (type_traits::is_variant_v<value_t>) {
@@ -555,12 +617,12 @@ auto prc::as_string(const T& value) -> std::string {
 	else if constexpr (type_traits::is_optional_v<value_t>) {
 		return value.has_value() ?
 			as_string(*value) :
-			"std::nullopt";
+			"std::nullopt"s;
 	}
 	else if constexpr (std::is_same_v<std::any, value_t>) {
 		return value.empty() ?
-			"empty any" :
-			"any containing type " + held_type_name(value);
+			"empty any"s :
+			"any containing type "s + held_type_name(value);
 	}
 	else if constexpr (std::is_base_of_v<std::exception, value_t>) {
 		return value.what();
@@ -572,7 +634,8 @@ auto prc::as_string(const T& value) -> std::string {
 	}
 	else if constexpr (type_traits::is_container_v<value_t>) {
 		auto str = std::string{};
-		str.reserve(value.size() * 4); // Guess
+		const auto estimate_size = value.size() * 4;
+		str.reserve(estimate_size);
 		str += '[';
 		for (auto&& element : value) {
 			str += as_string(element);
@@ -588,7 +651,8 @@ auto prc::as_string(const T& value) -> std::string {
 	}
 	else if constexpr(type_traits::is_tuple_v<value_t>){
 		auto str = std::string{};
-		str.reserve(std::tuple_size_v<value_t> * 4); // Guess
+		const auto estimate_size = std::tuple_size_v<value_t> * 4;
+		str.reserve(estimate_size);
 		str += '[';
 		tuple_for_each(value, [&str](auto&& elem) {
 			str += as_string(elem);
@@ -612,10 +676,17 @@ auto prc::as_string(const T& value) -> std::string {
 	else {
 		const auto* first = reinterpret_cast<const uint8_t*>(&value);
 		const auto* last = first + sizeof(value);
-		auto str = std::string{ "unknown 0x" };
+		constexpr auto prologue = std::string_view{ "unknown 0x" };
+		const auto target_size =
+			prologue.size() +
+			(last - first) * 2;
+		auto str = std::string{};
+		str.reserve(target_size);
+		str += prologue;
 		for (auto it = first; it < last; ++it) {
 			str += detail::uint8_to_hexstring(*it);
 		}
+		PRECOOKED_ASSERT(target_size == str.size());
 		return str;
 	}
 
@@ -640,8 +711,8 @@ namespace prc::detail {
 
 
 [[nodiscard]] PRECOOKED_INLINE auto filesize_to_size_t(
-	uintmax_t filesize_uintmax
-) noexcept ->std::optional<size_t> {
+	const uintmax_t filesize_uintmax
+) noexcept -> std::optional<size_t> {
 	const auto file_size = static_cast<size_t>(filesize_uintmax);
 	return static_cast<uintmax_t>(file_size) == filesize_uintmax ?
 		file_size :
@@ -854,18 +925,6 @@ auto prc::join_strings(const Strings& strings) -> std::basic_string<Char> {
 //////////////////////////////////////////////////////////////////////////////
 
 
-#include <algorithm>
-
-
-
-
-
-//////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////
-
-
-
 namespace prc::detail {
 template <typename Char>
 [[nodiscard]] constexpr auto default_trim_chars() noexcept -> std::basic_string_view<Char> {
@@ -1031,7 +1090,7 @@ auto prc::trim_string_to_view(
 ) noexcept -> std::basic_string_view<type_traits::underlying_char_t<Str0>> {
 	using Char = type_traits::underlying_char_t<Str0>;
 	static_assert(type_traits::is_valid_char_v<Char>);
-	return trim_string_to_view(str, detail::default_trim_chars<Char> ());
+	return trim_string_to_view(str, detail::default_trim_chars<Char>());
 }
 
  template <typename Str0, typename Str1>
@@ -1094,11 +1153,18 @@ auto prc::is_trimmed(const Str0& str, const Str1& trim_chars) noexcept -> bool {
 namespace prc::detail {
 
 
-constexpr auto find_case_sensitive_func = [](const auto& str, const auto& key, const size_t offset) noexcept -> size_t {
-	return str.find(key, offset);
+constexpr auto find_case_sensitive_f = [](
+	const auto& haystack, 
+	const auto& needle, 
+	const size_t offset
+) noexcept -> size_t {
+	return haystack.find(needle, offset);
 };
 
-const auto is_chars_equal_ignore_case = [](auto&& a, auto&& b) noexcept {
+const auto is_chars_equal_ignore_case_f = [](
+	auto&& a, 
+	auto&& b
+) noexcept {
 	return a == b || std::tolower(a) == std::tolower(b);
 };
 template <typename Char>
@@ -1107,7 +1173,7 @@ template <typename Char>
 	const std::basic_string_view<Char>& b
 ) noexcept -> bool {
 	PRECOOKED_ASSERT(a.size() == b.size());
-	return std::equal(a.begin(), a.end(), b.begin(), detail::is_chars_equal_ignore_case);
+	return std::equal(a.begin(), a.end(), b.begin(), detail::is_chars_equal_ignore_case_f);
 }
 
 
@@ -1134,7 +1200,7 @@ template <typename Char>
 	const auto needle_tail = needle.substr(1);
 	for (size_t i = offset; i < i_end; ++i) {
 		PRECOOKED_ASSERT(i < haystack.size());
-		if (!equals_needle_front_f(haystack[i])) {
+		if (!equals_needle_front_f(haystack[i])) PRECOOKED_LIKELY {
 			continue;
 		}
 		PRECOOKED_ASSERT(i + needle.size() <= haystack.size());
@@ -1172,7 +1238,7 @@ auto replace_string_part(
 
 // This function replaces string of equal size
 template <typename Char, typename FindFunc>
-[[nodiscard]] auto impl_replace_all_equal_key_length(
+[[nodiscard]] auto impl_replace_all_equal_needle_length(
 	std::basic_string<Char> haystack, 
 	const std::basic_string_view<Char> needle,
 	const std::basic_string_view<Char> replacement,
@@ -1203,23 +1269,24 @@ template <typename Char, typename FindFunc>
 	PRECOOKED_ASSERT(replacement.size() < needle.size());
 	constexpr auto npos = std::basic_string_view<Char>::npos;
 	// Optimization to avoid copying the first part
-	const auto first_key = find_func(haystack, needle, 0);
-	if (first_key == npos) {
+	const auto first_needle = find_func(haystack, needle, 0);
+	if (first_needle == npos) {
 		return haystack;
 	}
-	replace_string_part(haystack, first_key, replacement);
-	auto write_pos = first_key + replacement.size();
-	for (auto read_pos = first_key + needle.size();;) {
+	replace_string_part(haystack, first_needle, replacement);
+	auto write_pos = first_needle + replacement.size();
+	for (auto read_pos = first_needle + needle.size();;) {
 		PRECOOKED_ASSERT(write_pos < read_pos);
-		const auto key_pos = std::min(find_func(haystack, needle, read_pos), haystack.size());
-		while (read_pos < key_pos) {
+		const auto needle_pos = std::min(find_func(haystack, needle, read_pos), haystack.size());
+		while (read_pos < needle_pos) {
 			PRECOOKED_ASSERT(write_pos < haystack.size());
 			PRECOOKED_ASSERT(read_pos < haystack.size());
 			haystack[write_pos] = haystack[read_pos];
 			++write_pos;
 			++read_pos;
 		}
-		if (key_pos == haystack.size()) {
+		PRECOOKED_ASSERT(needle_pos <= haystack.size());
+		if (needle_pos == haystack.size()) {
 			break;
 		}
 		replace_string_part(haystack, write_pos, replacement);
@@ -1274,7 +1341,7 @@ template <typename Char, typename FindFunc>
 			needle, 
 			first_match + needle.size(), 
 			find_func
-		) + 1; // first_match indicates one occurances
+		) + 1; // first_match found indicates one occurances
 	};
 	const auto target_size =
 		needle.size() < replacement.size() ? haystack.size() + (replacement.size() - needle.size()) * calculate_num_occurances_f() :
@@ -1306,15 +1373,15 @@ template <typename Char, typename FindFunc>
 
 template <typename Char, typename Str0, typename Str1>
 auto prc::replace_all(std::basic_string<Char> haystack, const Str0& needle, const Str1& replacement) -> std::basic_string<Char> {
-	// Pick implementation based on key/dst size
+	// Pick implementation based on needle/replacement size
 	const auto haystack_sv = std::basic_string_view<Char>{ haystack };
 	const auto needle_sv = std::basic_string_view<Char>{ needle };
 	const auto replacement_sv = std::basic_string_view<Char>{ replacement };
-	const auto& find_func = detail::find_case_sensitive_func;
+	const auto& find_func = detail::find_case_sensitive_f;
 	const auto no_replacement_possible = needle_sv.empty() || needle_sv.size() > haystack_sv.size();
 	return
 		no_replacement_possible ? haystack :
-		needle_sv.length() == replacement_sv.length() ? detail::impl_replace_all_equal_key_length(std::move(haystack), needle_sv, replacement_sv, find_func) :
+		needle_sv.length() == replacement_sv.length() ? detail::impl_replace_all_equal_needle_length(std::move(haystack), needle_sv, replacement_sv, find_func) :
 		replacement_sv.length() < needle_sv.length() ? detail::impl_replace_all_shrink_string(std::move(haystack), needle_sv, replacement_sv, find_func) :
 		detail::impl_replace_all_rebuild_string<Char>(haystack, needle_sv, replacement_sv, find_func);
 }
@@ -1327,8 +1394,10 @@ auto prc::replace_all(const Str0& haystack, const Str1& needle, const Str2& repl
 	const auto haystack_sv = std::basic_string_view<Char>{ haystack };
 	const auto needle_sv = std::basic_string_view<Char>{ needle };
 	const auto replacement_sv = std::basic_string_view<Char>{ replacement };
-	const auto& find_func = detail::find_case_sensitive_func;
-	const auto no_replacement_possible = needle_sv.empty() || needle_sv.size() > haystack_sv.size();
+	const auto& find_func = detail::find_case_sensitive_f;
+	const auto no_replacement_possible = 
+		needle_sv.empty() || 
+		needle_sv.size() > haystack_sv.size();
 	return no_replacement_possible ?
 		std::basic_string<Char>{ haystack_sv } :
 		detail::impl_replace_all_rebuild_string(haystack_sv, needle_sv, replacement_sv, find_func);
@@ -1342,10 +1411,12 @@ auto prc::replace_all_ignore_case(std::basic_string<Char> haystack, const Str0& 
 	const auto needle_sv = std::basic_string_view<Char>{ needle };
 	const auto replacement_sv = std::basic_string_view<Char>{ replacement };
 	const auto& find_func = detail::impl_find_ignore_case<Char>;
-	const auto no_replacement_possible = needle_sv.empty() || needle_sv.size() > haystack_sv.size();
+	const auto no_replacement_possible = 
+		needle_sv.empty() || 
+		needle_sv.size() > haystack_sv.size();
 	return
 		no_replacement_possible ? haystack :
-		needle_sv.length() == replacement_sv.length() ? detail::impl_replace_all_equal_key_length(std::move(haystack), needle_sv, replacement_sv, find_func) :
+		needle_sv.length() == replacement_sv.length() ? detail::impl_replace_all_equal_needle_length(std::move(haystack), needle_sv, replacement_sv, find_func) :
 		replacement_sv.length() < needle_sv.length() ? detail::impl_replace_all_shrink_string(std::move(haystack), needle_sv, replacement_sv, find_func) :
 		detail::impl_replace_all_rebuild_string<Char>(haystack_sv, needle_sv, replacement_sv, find_func);
 }
@@ -1358,7 +1429,9 @@ auto prc::replace_all_ignore_case(const Str0& haystack, const Str1& needle, cons
 	const auto needle_sv = std::basic_string_view<Char>{ needle };
 	const auto replacement_sv = std::basic_string_view<Char>{ replacement };
 	const auto& find_func = detail::impl_find_ignore_case<Char>;
-	const auto no_replacement_possible = needle_sv.empty() || needle_sv.size() > haystack_sv.size();
+	const auto no_replacement_possible =
+		needle_sv.empty() || 
+		needle_sv.size() > haystack_sv.size();
 	return no_replacement_possible ?
 		std::basic_string<Char>{ haystack_sv } :
 		detail::impl_replace_all_rebuild_string(haystack_sv, needle_sv, replacement_sv, find_func);
@@ -1551,20 +1624,20 @@ template <typename Pred>
 
 auto prc::files_in_directory(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {
 	if (!std::filesystem::exists(dir)) {
-		throw prc::exceptions::dir_not_found_exception(dir);
+		throw prc::exceptions::dir_not_found_exception{ dir };
 	}
 	if (!std::filesystem::is_directory(dir)) {
-		throw prc::exceptions::is_not_directory_exception(dir);
+		throw prc::exceptions::is_not_directory_exception{ dir };
 	}
 	return detail::impl_scan_flat(dir, [](auto&& p) { return std::filesystem::is_regular_file(p); });
 }
 
 auto prc::subdirs_in_directory(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {
 	if (!std::filesystem::exists(dir)) {
-		throw prc::exceptions::dir_not_found_exception(dir);
+		throw prc::exceptions::dir_not_found_exception{ dir };
 	}
 	if (!std::filesystem::is_directory(dir)) {
-		throw prc::exceptions::is_not_directory_exception(dir);
+		throw prc::exceptions::is_not_directory_exception{ dir };
 	}
 	return detail::impl_scan_flat(dir, [](auto&& p) { return std::filesystem::is_directory(p); });
 }
@@ -1592,24 +1665,27 @@ template <typename Pred>
 
 auto prc::files_in_directory_tree(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {
 	if (!std::filesystem::exists(dir)) {
-		throw prc::exceptions::dir_not_found_exception(dir);
+		throw prc::exceptions::dir_not_found_exception{ dir };
 	}
 	if (!std::filesystem::is_directory(dir)) {
-		throw prc::exceptions::is_not_directory_exception(dir);
+		throw prc::exceptions::is_not_directory_exception{ dir };
 	}
-	return detail::impl_scan_tree(dir, [](auto&& p) { return std::filesystem::is_regular_file(p); });
+	const auto filter = [](const std::filesystem::path& p) { 
+		return std::filesystem::is_regular_file(p); 
+	};
+	return detail::impl_scan_tree(dir, filter);
 }
 
 auto prc::subdirs_in_directory_tree(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {
 	if (!std::filesystem::exists(dir)) {
-		throw prc::exceptions::dir_not_found_exception(dir);
+		throw prc::exceptions::dir_not_found_exception{ dir };
 	}
 	if (!std::filesystem::is_directory(dir)) {
-		throw prc::exceptions::is_not_directory_exception(dir);
+		throw prc::exceptions::is_not_directory_exception{ dir };
 	}
-	return detail::impl_scan_tree(dir, [](auto&& p) { return std::filesystem::is_directory(p); });
+	const auto filter = [](const std::filesystem::path& p) {
+		return std::filesystem::is_directory(p);
+	};
+	return detail::impl_scan_tree(dir, filter);
 }
 
-
-
-static_assert(std::string_view::npos == std::string::npos);
