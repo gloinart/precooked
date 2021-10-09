@@ -1,6 +1,6 @@
 #include "precooked.hpp"
 
-namespace prc {
+namespace peo {
 
 // String - remove
 [[nodiscard]] PRECOOKED_INLINE auto remove_all(std::string str, std::string_view src) noexcept ->std::string;
@@ -21,7 +21,7 @@ namespace prc {
 
 
 
-auto prc::is_vector_equal_to_file_content(
+auto peo::is_vector_equal_to_file_content(
 	const detail::byte_view& byteview, 
 	const std::filesystem::path& filepath
 ) -> bool {
@@ -32,7 +32,7 @@ auto prc::is_vector_equal_to_file_content(
 	const auto file_size_uintmax = std::filesystem::file_size(filepath);
 	const auto file_size_optional = detail::filesize_to_size_t(file_size_uintmax);
 	if (!file_size_optional.has_value()) {
-		throw prc::exceptions::file_too_large_exception(filepath, file_size_uintmax);
+		throw peo::exceptions::file_too_large_exception(filepath, file_size_uintmax);
 	}
 	const auto file_size = *file_size_optional;
 	if (file_size != byteview.size()) {
@@ -41,7 +41,7 @@ auto prc::is_vector_equal_to_file_content(
 	auto buffer = std::vector<detail::byte_view::byte_t>{};
 	auto file_stream = std::ifstream{ filepath, std::ios::binary };
 	if (!file_stream.is_open()) {
-		throw prc::exceptions::read_file_exception(filepath);
+		throw peo::exceptions::read_file_exception(filepath);
 	}
 	const auto scope_exit = detail::scope_exit{ [&file_stream]() {
 		file_stream.close();
@@ -67,7 +67,7 @@ auto prc::is_vector_equal_to_file_content(
 	return true;
 }
 
-auto prc::is_string_equal_to_file_content(std::string_view str, const std::filesystem::path& filepath) -> bool {
+auto peo::is_string_equal_to_file_content(std::string_view str, const std::filesystem::path& filepath) -> bool {
 	return is_vector_equal_to_file_content(str, filepath);
 }
 
@@ -83,31 +83,31 @@ auto prc::is_string_equal_to_file_content(std::string_view str, const std::files
 
 
 // String - remove
-auto prc::remove_all(std::string str, std::string_view src) noexcept ->std::string {
+auto peo::remove_all(std::string str, std::string_view src) noexcept ->std::string {
 	return str.empty() || src.empty() ?
 		std::string{}:
-		detail::impl_replace_all_shrink_string(std::move(str), src, std::string_view{}, detail::find_case_sensitive_func);
+		detail::impl_replace_all_shrink_string(std::move(str), src, std::string_view{}, detail::find_case_sensitive_f);
 }
-auto prc::remove_all(std::string_view str, std::string_view src)->std::string {
+auto peo::remove_all(std::string_view str, std::string_view src)->std::string {
 	return str.empty() || src.empty() ?
 		std::string{} : 
-		detail::impl_replace_all_rebuild_string(std::move(str), src, std::string_view{}, detail::find_case_sensitive_func);
+		detail::impl_replace_all_rebuild_string(std::move(str), src, std::string_view{}, detail::find_case_sensitive_f);
 }
-auto prc::remove_all(const char* str, std::string_view src)->std::string {
+auto peo::remove_all(const char* str, std::string_view src)->std::string {
 	return remove_all(std::string_view(str), src);
 
 }
-auto prc::remove_all_ignore_case(std::string str, std::string_view src) noexcept->std::string {
+auto peo::remove_all_ignore_case(std::string str, std::string_view src) noexcept->std::string {
 	return str.empty() || src.empty() ?
 		std::string{} : 
 		detail::impl_replace_all_shrink_string(std::move(str), src, std::string_view{}, detail::impl_find_ignore_case<char>);
 }
-auto prc::remove_all_ignore_case(std::string_view str, std::string_view src)->std::string {
+auto peo::remove_all_ignore_case(std::string_view str, std::string_view src)->std::string {
 	return str.empty() || src.empty() ?
 		std::string{} : 
 		detail::impl_replace_all_rebuild_string(std::move(str), src, std::string_view{}, detail::impl_find_ignore_case<char>);
 }
-auto prc::remove_all_ignore_case(const char* str, std::string_view src)->std::string {
+auto peo::remove_all_ignore_case(const char* str, std::string_view src)->std::string {
 	return remove_all_ignore_case(std::string_view(str), src);
 }
 
