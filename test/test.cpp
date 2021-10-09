@@ -22,58 +22,75 @@
 
 namespace {
 
-	auto verify_type_traits() -> void {
+auto verify_type_traits() -> void {
+	// is_container_v
+	static_assert(peo::type_traits::is_container_v<std::vector<int>&&>);
+	static_assert(peo::type_traits::is_container_v<std::array<int, 3>>);
+	static_assert(peo::type_traits::is_container_v<std::string>);
+	static_assert(peo::type_traits::is_container_v<std::map<int, int>>);
+	static_assert(!peo::type_traits::is_container_v<int>);
 
+	// is_optional_v
+	static_assert(peo::type_traits::is_optional_v<std::optional<int>>);
+	static_assert(!peo::type_traits::is_optional_v<std::vector<int>>);
 
-		static_assert(prc::type_traits::is_container_v<std::vector<int>&&>);
-		static_assert(prc::type_traits::is_container_v<std::array<int, 3>>);
-		static_assert(prc::type_traits::is_container_v<std::string>);
-		static_assert(prc::type_traits::is_optional_v<std::optional<int>>);
+	// is_string_v
+	static_assert(peo::type_traits::is_string_v<std::wstring>);
+	static_assert(peo::type_traits::is_string_v<std::basic_string_view<char>>);
+	static_assert(peo::type_traits::is_string_v<std::basic_string_view<wchar_t>>);
+	static_assert(peo::type_traits::is_string_v<std::basic_string_view<char32_t>>);
+	static_assert(peo::type_traits::is_string_v<std::basic_string_view<char16_t>>);
+	static_assert(peo::type_traits::is_string_v<std::basic_string<char>>);
+	static_assert(peo::type_traits::is_string_v<std::basic_string<wchar_t>>);
+	static_assert(peo::type_traits::is_string_v<std::basic_string<char32_t>>);
+	static_assert(peo::type_traits::is_string_v<std::basic_string<char16_t>>);
+	static_assert(!peo::type_traits::is_string_v<int>);
 
+	// is_duration_v
+	static_assert(!peo::type_traits::is_duration_v<int>);
 
-		static_assert(prc::type_traits::is_string_v<std::wstring>);
-		static_assert(prc::type_traits::is_string_v<std::basic_string_view<char>>);
-		static_assert(prc::type_traits::is_string_v<std::basic_string_view<wchar_t>>);
-		static_assert(prc::type_traits::is_string_v<std::basic_string_view<char32_t>>);
-		static_assert(prc::type_traits::is_string_v<std::basic_string_view<char16_t>>);
-		static_assert(prc::type_traits::is_string_v<std::basic_string<char>>);
-		static_assert(prc::type_traits::is_string_v<std::basic_string<wchar_t>>);
-		static_assert(prc::type_traits::is_string_v<std::basic_string<char32_t>>);
-		static_assert(prc::type_traits::is_string_v<std::basic_string<char16_t>>);
-		static_assert(!prc::type_traits::is_string_v<int>);
-
-		static_assert(!prc::type_traits::is_duration_v<int>);
-
+	// underlying_char_f
+	static_assert(std::is_same_v<peo::type_traits::underlying_char_t<std::string>, char>);
+	static_assert(std::is_same_v<peo::type_traits::underlying_char_t<std::string_view>, char>);
+	static_assert(std::is_same_v<peo::type_traits::underlying_char_t<char*>, char>);
+	static_assert(std::is_same_v<peo::type_traits::underlying_char_t<char[4]>, char>);
+	{
+		const auto str = "abc";
+		using Str = decltype(str);
+		static_assert(std::is_same_v<peo::type_traits::underlying_char_t<Str>, char>);
 	}
 
-
+	int x = 0, y = 0;
+	peo::tuple_for_each(std::tie(x, y), [](auto&&) {});
+}
 
 }
+
 
 
 TEST_CASE("to_lower") {
 	using namespace std::string_view_literals;
 	using namespace std::string_literals;
-	REQUIRE( prc::to_lower("ABC"sv) == "abc"sv );
-	REQUIRE( prc::to_lower("ABC") == "abc"sv );
+	REQUIRE(peo::to_lower("ABC"sv) == "abc"sv);
+	REQUIRE(peo::to_lower("ABC") == "abc"sv);
 
-	REQUIRE(prc::to_lower(L"ABC") == L"abc"sv);
-	REQUIRE(prc::to_lower(u"ABC") == u"abc"sv);
-	REQUIRE(prc::to_lower(U"ABC") == U"abc"sv);
-	//REQUIRE(prc::to_lower("ABC") == "abc");
+	REQUIRE(peo::to_lower(L"ABC") == L"abc"sv);
+	REQUIRE(peo::to_lower(u"ABC") == u"abc"sv);
+	REQUIRE(peo::to_lower(U"ABC") == U"abc"sv);
+	REQUIRE(peo::to_lower("ABC") == "abc");
 
 
-	REQUIRE(prc::to_lower(L"ABC"s) == L"abc"sv);
-	REQUIRE(prc::to_lower(u"ABC"s) == u"abc"sv);
-	REQUIRE(prc::to_lower(U"ABC"s) == U"abc"sv);
+	REQUIRE(peo::to_lower(L"ABC"s) == L"abc"sv);
+	REQUIRE(peo::to_lower(u"ABC"s) == u"abc"sv);
+	REQUIRE(peo::to_lower(U"ABC"s) == U"abc"sv);
 }
 
 TEST_CASE("to_upper()") {
 	using namespace std::string_view_literals;
 	using namespace std::string_literals;
-	REQUIRE(prc::to_upper("abc"sv) == "ABC");
-	REQUIRE(prc::to_upper("abc") == "ABC");
-	REQUIRE(prc::to_upper("abc"s) == "ABC");
+	REQUIRE(peo::to_upper("abc"sv) == "ABC");
+	REQUIRE(peo::to_upper("abc") == "ABC");
+	REQUIRE(peo::to_upper("abc"s) == "ABC");
 }
 
 
@@ -85,34 +102,34 @@ TEST_CASE("file_to_string"){
 	auto tmpfile = tmpdir / "test.txt";
 	{
 		auto content = std::string{ "abcdefgh" };
-		prc::write_string_to_file(content, tmpfile);
+		peo::write_string_to_file(content, tmpfile);
 		REQUIRE(fs::exists(tmpfile));
-		auto back = prc::read_file_to_string(tmpfile);
+		auto back = peo::read_file_to_string(tmpfile);
 		REQUIRE(back == content);
 
 
 		{
-			prc::write_string_to_file("abc", tmpfile);
-			prc::write_string_to_file(u"abc", tmpfile);
-			prc::write_string_to_file(U"abc", tmpfile);
+			peo::write_string_to_file("abc", tmpfile);
+			peo::write_string_to_file(u"abc", tmpfile);
+			peo::write_string_to_file(U"abc", tmpfile);
 		}
 	}
 
 
 	{
 		auto content = std::wstring{ L"abcdefgh" };
-		prc::write_string_to_file(content, tmpfile);
+		peo::write_string_to_file(content, tmpfile);
 		REQUIRE(fs::exists(tmpfile));
-		auto back = prc::read_file_to_string<wchar_t>(tmpfile);
+		auto back = peo::read_file_to_string<wchar_t>(tmpfile);
 		REQUIRE(back == content);
 	}
 
 	{
 		auto content = std::string{ "abcdefg" };
-		prc::write_string_to_file(content, tmpfile);
+		peo::write_string_to_file(content, tmpfile);
 		REQUIRE(fs::exists(tmpfile));
 		REQUIRE_THROWS(
-			prc::read_file_to_string<wchar_t>(tmpfile)
+			peo::read_file_to_string<wchar_t>(tmpfile)
 		);
 
 	}
@@ -124,18 +141,18 @@ TEST_CASE("file_to_string"){
 // Tuple
 TEST_CASE("tuple"){
 	REQUIRE(
-		prc::tuple_any_of(std::make_tuple(1, 5, 15),[](auto&& v) {
+		peo::tuple_any_of(std::make_tuple(1, 5, 15),[](auto&& v) {
 			return v == 5;
 		})
 	);
 	REQUIRE_FALSE(
-		prc::tuple_any_of(std::make_tuple(1, 5, 15), [](auto&& v) {
+		peo::tuple_any_of(std::make_tuple(1, 5, 15), [](auto&& v) {
 			return v == 6;
 		})
 	);
 
 	auto src = std::make_tuple(int(0), 0.0f, 0.0);
-	prc::tuple_for_each(src, [](auto&& v) { v += 1; });
+	peo::tuple_for_each(src, [](auto&& v) { v += 1; });
 	REQUIRE(
 		src ==
 		std::make_tuple(int(1), 1.0f, 1.0)
@@ -143,26 +160,26 @@ TEST_CASE("tuple"){
 
 }
 
-
-template <typename Char>
-auto convert_string(std::string str) {
-	auto ret = std::basic_string<Char>{ str.begin(), str.end() };
-	return ret;
+namespace {
+	template <typename Char>
+	[[nodiscard]] auto convert_string(std::string str) {
+		auto ret = std::basic_string<Char>{ str.begin(), str.end() };
+		return ret;
+	}
 }
-
 
 
 // String splitting
 TEST_CASE("split_string"){
 
 	REQUIRE(
-		prc::split_string("", "").empty()
+		peo::split_string("", "").empty()
 	);
 	REQUIRE(
-		prc::split_string("xxxyxyxy", "xy").empty()
+		peo::split_string("xxxyxyxy", "xy").empty()
 	);
 
-	auto test_for_string_type = [](auto&& string_type_identifier) {
+	auto test_for_string_type_f = [](auto&& string_type_identifier) {
 		using string_t = std::decay_t<decltype(string_type_identifier)>;
 		using char_t = typename string_t::value_type;
 		const auto char_strs = std::vector<std::string>{
@@ -185,43 +202,43 @@ TEST_CASE("split_string"){
 		const auto c = convert_string<char_t>("c");
 
 		for (const auto& str : strs) {
-			const auto splitted_sv = prc::split_string_to_views(str, space);
+			const auto splitted_sv = peo::split_string_to_views(str, space);
 			REQUIRE(splitted_sv.size() == 3);
 			REQUIRE(splitted_sv[0] == a);
 			REQUIRE(splitted_sv[1] == b);
 			REQUIRE(splitted_sv[2] == c);
 			REQUIRE(
-				prc::split_string(str, space) ==
+				peo::split_string(str, space) ==
 				(std::vector<string_t>{a, b, c})
 			);
 		}
 		for (const auto& str : strs) {
-			const auto splitted_sv = prc::split_string(str, space);
+			const auto splitted_sv = peo::split_string(str, space);
 			REQUIRE(splitted_sv.size() == 3);
 			REQUIRE(splitted_sv[0] == a);
 			REQUIRE(splitted_sv[1] == b);
 			REQUIRE(splitted_sv[2] == c);
 			REQUIRE(
-				prc::split_string(str, space) ==
+				peo::split_string(str, space) ==
 				(std::vector<string_t>{a, b, c})
 			);
 		}
 	};
 
-	test_for_string_type(std::basic_string<char>{});
-	test_for_string_type(std::basic_string<wchar_t>{});
-	test_for_string_type(std::basic_string<char16_t>{});
-	test_for_string_type(std::basic_string<char32_t>{});
+	test_for_string_type_f(std::basic_string<char>{});
+	test_for_string_type_f(std::basic_string<wchar_t>{});
+	test_for_string_type_f(std::basic_string<char16_t>{});
+	test_for_string_type_f(std::basic_string<char32_t>{});
 
 
 	{
 		const auto str = std::string{ "abc" };
 		REQUIRE(
-			prc::split_string(str, "") ==
+			peo::split_string(str, "") ==
 			std::vector<std::string>{"abc"}
 		);
 		REQUIRE(
-			prc::split_string_to_views(str, "") ==
+			peo::split_string_to_views(str, "") ==
 			std::vector<std::string_view>{"abc"}
 		);
 	}
@@ -229,11 +246,11 @@ TEST_CASE("split_string"){
 	{
 		const auto str = std::string{ "abc" };
 		REQUIRE(
-			prc::split_string(str, "a") ==
+			peo::split_string(str, "a") ==
 			std::vector<std::string>{"bc"}
 		);
 		REQUIRE(
-			prc::split_string_to_views(str, "c") ==
+			peo::split_string_to_views(str, "c") ==
 			std::vector<std::string_view>{"ab"}
 		);
 	}
@@ -247,19 +264,19 @@ TEST_CASE("find_ignore_case"){
 	const auto str = "aa01234abc"sv;
 	for (auto i = 0; i < 100; ++i) {
 		REQUIRE(
-			prc::find_ignore_case(str, "aBc", i) ==
+			peo::find_ignore_case(str, "aBc", i) ==
 			str.find("abc", i)
 		);
 	}
 	for (auto i = 0; i < 100; ++i) {
 		REQUIRE(
-			prc::find_ignore_case(str, "aA", i) ==
+			peo::find_ignore_case(str, "aA", i) ==
 			str.find("aa", i)
 		);
 	}
 	for (auto i = 0; i < 100; ++i) {
 		REQUIRE(
-			prc::find_ignore_case(str, "3", i) ==
+			peo::find_ignore_case(str, "3", i) ==
 			str.find("3", i)
 		);
 	}
@@ -281,33 +298,33 @@ TEST_CASE("trim_string"){
 		"a b c  ",
 	};
 	for (const auto& str : strs) {
-		const auto trimmed = prc::trim_string_to_view(str);
+		const auto trimmed = peo::trim_string_to_view(str);
 		REQUIRE(trimmed == std::string_view{ "a b c" });
-		REQUIRE(prc::trim_string(str) == std::string_view{ "a b c" });
+		REQUIRE(peo::trim_string(str) == std::string_view{ "a b c" });
 		REQUIRE(
-			prc::is_trimmed(str) ==
-			(str == prc::trim_string(str))
+			peo::is_trimmed(str) ==
+			(str == peo::trim_string(str))
 		);
 
 	}
 	for (const auto& str : strs) {
-		const auto trimmed = prc::trim_string(str);
+		const auto trimmed = peo::trim_string(str);
 		REQUIRE(trimmed == std::string_view{ "a b c" });
-		REQUIRE(prc::trim_string(str) == std::string_view{ "a b c" });
+		REQUIRE(peo::trim_string(str) == std::string_view{ "a b c" });
 		REQUIRE(
-			prc::is_trimmed(str) ==
-			(str == prc::trim_string(str))
+			peo::is_trimmed(str) ==
+			(str == peo::trim_string(str))
 		);
 	}
 	{
 		using namespace std::string_view_literals;
 		const auto str = std::string{ "abc" };
 		REQUIRE(
-			prc::trim_string(str, "") ==
+			peo::trim_string(str, "") ==
 			"abc"
 		);
 		REQUIRE(
-			prc::trim_string_to_view(str, "") ==
+			peo::trim_string_to_view(str, "") ==
 			"abc"
 		);
 	}
@@ -317,35 +334,36 @@ TEST_CASE("trim_string"){
 
 // String to number
 TEST_CASE("string_to_number"){
-	REQUIRE(prc::string_to_number<int>("1234") == 1234);
-	REQUIRE(prc::string_to_number<double>("1") == 1);
-	REQUIRE(prc::string_to_number<double>("1.5") == 1.5);
-	REQUIRE(prc::string_to_number<double>("abc") == std::nullopt);
+	REQUIRE(peo::string_to_number<int>("1234") == 1234);
+	REQUIRE(peo::string_to_number<double>("1") == 1);
+	REQUIRE(peo::string_to_number<double>("1.5") == 1.5);
+	REQUIRE(peo::string_to_number<float>("1.5") == 1.5);
+	REQUIRE(peo::string_to_number<double>("abc") == std::nullopt);
 
 
-	REQUIRE(prc::string_to_number<int>("a 1234") == std::nullopt);
-	REQUIRE(prc::string_to_number<int>("1234 abc") == std::nullopt);
-	REQUIRE(prc::string_to_number<int>("1234 ") == std::nullopt);
-	REQUIRE(prc::string_to_number<double>("1  a") == std::nullopt);
-	REQUIRE(prc::string_to_number<double>("a1.5") == std::nullopt);
-	REQUIRE(prc::string_to_number<double>("abc") == std::nullopt);
+	REQUIRE(peo::string_to_number<int>("a 1234") == std::nullopt);
+	REQUIRE(peo::string_to_number<int>("1234 abc") == std::nullopt);
+	REQUIRE(peo::string_to_number<int>("1234 ") == std::nullopt);
+	REQUIRE(peo::string_to_number<double>("1  a") == std::nullopt);
+	REQUIRE(peo::string_to_number<double>("a1.5") == std::nullopt);
+	REQUIRE(peo::string_to_number<double>("abc") == std::nullopt);
 }
 
 TEST_CASE("replace_all_ignore_case") {
 	using namespace std::string_literals;
 	using namespace std::string_view_literals;
 	REQUIRE(
-		prc::replace_all_ignore_case("ABC", "b", "") ==
+		peo::replace_all_ignore_case("ABC", "b", "") ==
 		"AC"
 	);
 
 	REQUIRE(
-		prc::replace_all_ignore_case("ABC"s, "b"sv, ""s) ==
+		peo::replace_all_ignore_case("ABC"s, "b"sv, ""s) ==
 		"AC"s
 	);
 
 	REQUIRE(
-		prc::replace_all_ignore_case("ABC"sv, "b"sv, ""sv) ==
+		peo::replace_all_ignore_case("ABC"sv, "b"sv, ""sv) ==
 		"AC"sv
 	);
 
@@ -357,79 +375,79 @@ TEST_CASE("replace_all_ignore_case") {
 TEST_CASE("replace_all (std::string)"){
 	using namespace std::string_literals;
 	REQUIRE(
-		prc::replace_all("abcabcb"s, "b", "dd") ==
+		peo::replace_all("abcabcb"s, "b", "dd") ==
 		"addcaddcdd"
 	);
 
 	REQUIRE(
-		prc::replace_all("aaaa", "aaaa", "dd") ==
+		peo::replace_all("aaaa", "aaaa", "dd") ==
 		"dd"
 	);
 
 
 	REQUIRE(
-		prc::replace_all("abcabcb"s, "b", "") ==
+		peo::replace_all("abcabcb"s, "b", "") ==
 		"acac"
 	);
 
 	REQUIRE(
-		prc::replace_all("aa bbb aa"s, "aa", "xxxx") ==
+		peo::replace_all("aa bbb aa"s, "aa", "xxxx") ==
 		"xxxx bbb xxxx"
 	);
 
 	REQUIRE(
-		prc::replace_all("aa bbb aa"s, "aa", "x") ==
+		peo::replace_all("aa bbb aa"s, "aa", "x") ==
 		"x bbb x"
 	);
 
 	REQUIRE(
-		prc::replace_all("aa bbb aa"s, "bbb", "") ==
+		peo::replace_all("aa bbb aa"s, "bbb", "") ==
 		"aa  aa"
 	);
 
 	REQUIRE(
-		prc::replace_all(" aa bbb aa "s, "aa", "xxxx") ==
+		peo::replace_all(" aa bbb aa "s, "aa", "xxxx") ==
 		" xxxx bbb xxxx "
 	);
 
 	REQUIRE(
-		prc::replace_all(" aa bbb aa "s, "aa", "bb") ==
+		peo::replace_all(" aa bbb aa "s, "aa", "bb") ==
 		" bb bbb bb "
 	);
 }
 
 TEST_CASE("replace_all (const char*)") {
 	REQUIRE(
-		prc::replace_all("abcabcb", "b", "dd") ==
+		peo::replace_all("abcabcb", "b", "dd") ==
 		"addcaddcdd"
 	);
 
 	REQUIRE(
-		prc::replace_all("abcabcb", "b", "") ==
+		peo::replace_all("abcabcb", "b", "") ==
 		"acac"
 	);
 
 	REQUIRE(
-		prc::replace_all("aa bbb aa", "aa", "xxxx") ==
+		peo::replace_all("aa bbb aa", "aa", "xxxx") ==
 		"xxxx bbb xxxx"
 	);
 
 	REQUIRE(
-		prc::replace_all("aa bbb aa", "aa", "x") ==
+		peo::replace_all("aa bbb aa", "aa", "x") ==
 		"x bbb x"
 	);
 
 	REQUIRE(
-		prc::replace_all("aa bbb aa", "bbb", "") ==
+		peo::replace_all("aa bbb aa", "bbb", "") ==
 		"aa  aa"
 	);
 
 	REQUIRE(
-		prc::replace_all(" aa bbb aa ", "aa", "xxxx") ==
+		peo::replace_all(" aa bbb aa ", "aa", "xxxx") ==
 		" xxxx bbb xxxx "
 	);
 	REQUIRE(
-		prc::replace_all(" aa bbb aa ", "aa", "bb") ==
+		peo::replace_all(" aa bbb aa ", "aa", "bb") ==
 		" bb bbb bb "
 	);
 }
@@ -440,39 +458,39 @@ TEST_CASE("replace_all (const char*)") {
 
 TEST_CASE("contains_substring_ignore_case"){
 	REQUIRE(
-		prc::contains_substring_ignore_case("ABCCBA", "cba") ==
+		peo::contains_substring_ignore_case("ABCCBA", "cba") ==
 		true
 	);
 	REQUIRE(
-		prc::contains_substring_ignore_case("ABCCBA", "abc") ==
+		peo::contains_substring_ignore_case("ABCCBA", "abc") ==
 		true
 	);
 	REQUIRE(
-		prc::contains_substring_ignore_case("ABCCBA", "cc") ==
+		peo::contains_substring_ignore_case("ABCCBA", "cc") ==
 		true
 	);
 	REQUIRE(
-		prc::contains_substring_ignore_case("ABCCBA", "b") ==
+		peo::contains_substring_ignore_case("ABCCBA", "b") ==
 		true
 	);
 	REQUIRE(
-		prc::contains_substring_ignore_case("ABCCBA", "") ==
+		peo::contains_substring_ignore_case("ABCCBA", "") ==
 		false
 	);
 	REQUIRE(
-		prc::contains_substring_ignore_case("", "") ==
+		peo::contains_substring_ignore_case("", "") ==
 		false
 	);
 	REQUIRE(
-		prc::contains_substring_ignore_case("", "xyz") ==
+		peo::contains_substring_ignore_case("", "xyz") ==
 		false
 	);
 	REQUIRE(
-		prc::is_equal_ignore_case("aaa", "AAA") ==
+		peo::is_equal_ignore_case("aaa", "AAA") ==
 		true
 	);
 	REQUIRE(
-		prc::is_equal_ignore_case("aAa", "AaA") ==
+		peo::is_equal_ignore_case("aAa", "AaA") ==
 		true
 	);
 };
@@ -482,20 +500,20 @@ TEST_CASE("contains_substring_ignore_case"){
 TEST_CASE("join_string"){
 	using namespace std::string_view_literals;
 	REQUIRE(
-		prc::join_strings(std::array{ "a"sv, "b"sv, "c"sv }, "-") ==
+		peo::join_strings(std::array{ "a"sv, "b"sv, "c"sv }, "-") ==
 		"a-b-c"
 	);
 	REQUIRE(
-		prc::join_strings(std::array{ "a"sv, "b"sv, "c"sv }, "") ==
+		peo::join_strings(std::array{ "a"sv, "b"sv, "c"sv }, "") ==
 		"abc"
 	);
 
 	REQUIRE(
-		prc::join_strings(std::array{ "aa"sv, "bb"sv, "cc"sv }) ==
+		peo::join_strings(std::array{ "aa"sv, "bb"sv, "cc"sv }) ==
 		"aabbcc"
 	);
 	REQUIRE(
-		prc::join_strings(std::array{ "a"sv, "b"sv, "c"sv }) ==
+		peo::join_strings(std::array{ "a"sv, "b"sv, "c"sv }) ==
 		"abc"
 	);
 
@@ -504,7 +522,7 @@ TEST_CASE("join_string"){
 
 
 	REQUIRE(
-		prc::join_strings(std::array{ u"a"sv, u"b"sv, u"c"sv }) ==
+		peo::join_strings(std::array{ u"a"sv, u"b"sv, u"c"sv }) ==
 		u"abc"
 	);
 
@@ -519,11 +537,11 @@ TEST_CASE("join_string"){
 
 
 // To string containers and tuples
-TEST_CASE("as_string"){
+TEST_CASE("pretty_string"){
 
-	REQUIRE(prc::as_string("abc") == "abc");
-	REQUIRE(prc::as_string(5) == "5");
-	REQUIRE(prc::as_string(false) == "false");
+	REQUIRE(peo::pretty_string("abc") == "abc");
+	REQUIRE(peo::pretty_string(5) == "5");
+	REQUIRE(peo::pretty_string(false) == "false");
 
 
 	using map_t = std::map<int, std::string>;
@@ -532,85 +550,112 @@ TEST_CASE("as_string"){
 		{33, "three-three"},
 	};
 	REQUIRE(
-		prc::as_string(map) ==
+		peo::pretty_string(map) ==
 		"[[21 two-one] [33 three-three]]"
 	);
 	REQUIRE(
-		prc::as_string(map_t{}) ==
+		peo::pretty_string(map_t{}) ==
 		"[]"
 	);
 	REQUIRE(
-		prc::as_string(std::vector<int>{}) ==
+		peo::pretty_string(std::vector<int>{}) ==
 		"[]"
 	);
 	REQUIRE(
-		prc::as_string(std::make_tuple(31, 41, 51)) ==
+		peo::pretty_string(std::make_tuple(31, 41, 51)) ==
 		"[31 41 51]"
 	);
 	REQUIRE(
-		prc::as_string(std::array{ 31, 41, 51 }) ==
+		peo::pretty_string(std::array{ 31, 41, 51 }) ==
 		"[31 41 51]"
 	);
 	REQUIRE(
-		prc::as_string(std::vector<int>{ 31, 41, 51 }) ==
+		peo::pretty_string(std::vector<int>{ 31, 41, 51 }) ==
 		"[31 41 51]"
 	);
 	REQUIRE(
-		prc::as_string(std::make_pair(6, 7)) ==
+		peo::pretty_string(std::make_pair(6, 7)) ==
 		"[6 7]"
 	);
 	REQUIRE(
-		prc::as_string(std::optional<int>{}) ==
+		peo::pretty_string(std::optional<int>{}) ==
 		"std::nullopt"
 	);
 	REQUIRE(
-		prc::as_string(std::variant<int, float, std::string>{std::string{ "hej" }}) ==
-		prc::as_string(std::string{ "hej" })
+		peo::pretty_string(std::variant<int, float, std::string>{std::string{ "hej" }}) ==
+		peo::pretty_string(std::string{ "hej" })
 	);
 
 	REQUIRE(
-		prc::as_string(std::make_shared<std::string>("hej")) ==
+		peo::pretty_string(std::make_shared<std::string>("hej")) ==
 		"hej"
 	);
 
 	REQUIRE(
-		prc::as_string(std::shared_ptr<std::string>{}) ==
+		peo::pretty_string(std::shared_ptr<std::string>{}) ==
 		"nullptr"
 	);
 
 	REQUIRE(
-		prc::as_string(std::unique_ptr<std::string>{}) ==
+		peo::pretty_string(std::unique_ptr<std::string>{}) ==
 		"nullptr"
 	);
 
 	enum class Enum { A = 0, B = 7};
 	REQUIRE(
-		prc::as_string(Enum::A) ==
+		peo::pretty_string(Enum::A) ==
 		"0"
 	);
 	REQUIRE(
-		prc::as_string(Enum::B) ==
+		peo::pretty_string(Enum::B) ==
 		"7"
 	);
 
 	;
 	REQUIRE(
-		prc::as_string(std::chrono::seconds{ 1 }) ==
+		peo::pretty_string(std::chrono::seconds{ 1 }) ==
 		"1"
 	);
 
 
 	REQUIRE(
-		prc::as_string(std::chrono::milliseconds{ 1 }) ==
+		peo::pretty_string(std::chrono::milliseconds{ 1 }) ==
 		"1"
 	);
 
 
 	REQUIRE(
-		prc::as_string(std::wstring{ L"abc" }) ==
+		peo::pretty_string(std::wstring{ L"abc" }) ==
 		"abc"
 	);
 
+
+	{
+		auto sptr = std::make_shared<std::string>( "abc" );
+
+		REQUIRE(
+			peo::pretty_string(sptr.get()) ==
+			"abc"
+		);
+
+	}
+
+
+	{
+		auto sptr = std::make_shared<int>(5);
+		auto wptr = std::weak_ptr<int>(sptr);
+
+		REQUIRE(
+			peo::pretty_string(wptr) ==
+			"5"
+		);
+		sptr.reset();
+		REQUIRE(
+			peo::pretty_string(wptr) ==
+			"expired"
+		);
+
+	}
 
 	struct dummy_t {
 		uint8_t a = 10;
@@ -619,13 +664,14 @@ TEST_CASE("as_string"){
 		uint8_t d = 13;
 	};
 	REQUIRE(
-		prc::as_string(dummy_t{}) ==
+		peo::pretty_string(dummy_t{}) ==
 		"unknown 0x0a0b0c0d"
 	);
 };
 
+
 TEST_CASE("detail::uint8_to_hexstring") {
-	auto to_hex_sstr = [](const int value) {
+	auto to_hex_via_sstr_f = [](const int value) {
 		auto sstr = std::stringstream{};
 		sstr << std::hex << value;
 		const auto str = sstr.str();
@@ -637,10 +683,22 @@ TEST_CASE("detail::uint8_to_hexstring") {
 
 	for (int v = 0; v < 256; ++v) {
 		REQUIRE(
-			to_hex_sstr(v) == 
-			prc::detail::uint8_to_hexstring(static_cast<uint8_t>(v))
+			to_hex_via_sstr_f(v) ==
+			peo::detail::uint8_to_hexstring(static_cast<uint8_t>(v))
 		);
 	}
+	REQUIRE(
+		peo::detail::uint8_to_hexstring(0) == "00"
+	);
+	REQUIRE(
+		peo::detail::uint8_to_hexstring(1) == "01"
+	);
+	REQUIRE(
+		peo::detail::uint8_to_hexstring(255) == "ff"
+	);
+	REQUIRE(
+		peo::detail::uint8_to_hexstring(254) == "fe"
+	);
 
 }
 
@@ -650,14 +708,46 @@ TEST_CASE("detail::uint8_to_hexstring") {
 
 TEST_CASE("held_type_name"){
 	REQUIRE(
-		prc::held_type_name(std::variant<int, float, std::string>{std::string{ "hej" }}) ==
-		prc::held_type_name(std::string{ "hej" })
+		peo::held_type_name(std::variant<int, float, std::string>{std::string{ "hej" }}) ==
+		peo::held_type_name(std::string{ "hej" })
 	);
 
 	REQUIRE(
-		prc::held_type_name(std::variant<int, float, std::string>{int{}}) ==
-		prc::held_type_name(int{})
+		peo::held_type_name(std::variant<int, float, std::string>{int{}}) ==
+		peo::held_type_name(int{})
 	);
+}
+
+
+
+
+
+
+
+TEST_CASE("safe_cast") {
+	REQUIRE_THROWS(
+		peo::safe_cast<uint8_t>(-1)
+	);
+	REQUIRE(
+		peo::safe_cast<uint8_t>(1) == 1
+	);
+}
+
+
+
+
+
+TEST_CASE("detail::scope_exit") {
+	int a = 0;
+	{
+		REQUIRE(a == 0);
+		auto scope_exit = peo::detail::scope_exit{ [&a]() {
+			a = 1;
+		} };
+		REQUIRE(a == 0);
+	}
+	REQUIRE(a == 1);
+
 }
 
 
@@ -669,12 +759,42 @@ TEST_CASE("held_type_name"){
 
 
 
+TEST_CASE("make_args") {
 
-
-
-
-
-
+	{
+		using namespace std::string_literals;
+		auto strings = std::array{
+			"a\0"s,
+			"b\0"s,
+			"c\0"s
+		};
+		auto ptrs = std::array{
+			strings[0].data(),
+			strings[1].data(),
+			strings[2].data()
+		};
+		{
+			const auto facit = std::vector<std::string>{ "a", "b", "c" };
+			const auto argc = 3;
+			auto argv = ptrs.data();
+			auto args = peo::make_args(3, argv);
+			REQUIRE(args == facit);
+		}
+		{
+			const auto argc = 0;
+			const auto facit = std::vector<std::string>{};
+			auto argv = ptrs.data();
+			auto args = peo::make_args(0, argv);
+			REQUIRE(args == facit);
+		}
+	}
+	REQUIRE_THROWS(
+		peo::make_args(-1, nullptr)
+	);
+	REQUIRE_THROWS(
+		peo::make_args(1, nullptr)
+	);
+}
 
 
 
@@ -716,9 +836,9 @@ TEST_CASE("vector_to_string") {
 	namespace fs = std::filesystem;
 	auto tmpdir = fs::temp_directory_path();
 	auto tmpfile_path = tmpdir / "test.txt";
-	auto data = prc::read_file_to_vector<char>(tmpfile_path);
-	prc::write_vector_to_file(data, tmpfile_path);
-	REQUIRE(prc::is_vector_equal_to_file_content(data, tmpfile_path));
+	auto data = peo::read_file_to_vector<char>(tmpfile_path);
+	peo::write_vector_to_file(data, tmpfile_path);
+	REQUIRE(peo::is_vector_equal_to_file_content(data, tmpfile_path));
 }
 
 
