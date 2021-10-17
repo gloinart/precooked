@@ -98,8 +98,8 @@ TEST_CASE("to_upper()") {
 
 TEST_CASE("file_to_string"){
 	namespace fs = std::filesystem;
-	auto tmpdir = fs::temp_directory_path();
-	auto tmpfile = tmpdir / "test.txt";
+	const auto tmpdir = fs::temp_directory_path();
+	const auto tmpfile = tmpdir / "test.txt";
 	{
 		auto content = std::string{ "abcdefgh" };
 		peo::write_string_to_file(content, tmpfile);
@@ -162,7 +162,7 @@ TEST_CASE("tuple"){
 
 namespace {
 	template <typename Char>
-	[[nodiscard]] auto convert_string(std::string str) {
+	[[nodiscard]] auto convert_string(const std::string& str) {
 		auto ret = std::basic_string<Char>{ str.begin(), str.end() };
 		return ret;
 	}
@@ -610,29 +610,29 @@ TEST_CASE("pretty_string"){
 		peo::pretty_string(Enum::B) ==
 		"7"
 	);
-
-	;
 	REQUIRE(
 		peo::pretty_string(std::chrono::seconds{ 1 }) ==
 		"1"
 	);
-
-
 	REQUIRE(
 		peo::pretty_string(std::chrono::milliseconds{ 1 }) ==
 		"1"
 	);
-
-
 	REQUIRE(
 		peo::pretty_string(std::wstring{ L"abc" }) ==
 		"abc"
 	);
-
-
+	REQUIRE(
+		peo::pretty_string(std::u32string{ U"abc" }) ==
+		"abc"
+	);
+	
 	{
 		auto sptr = std::make_shared<std::string>( "abc" );
-
+		REQUIRE(
+			peo::pretty_string(sptr) ==
+			"abc"
+		);
 		REQUIRE(
 			peo::pretty_string(sptr.get()) ==
 			"abc"
@@ -652,25 +652,39 @@ TEST_CASE("pretty_string"){
 		sptr.reset();
 		REQUIRE(
 			peo::pretty_string(wptr) ==
-			"expired"
+			"nullptr"
 		);
 
 	}
 
-	struct dummy_t {
+	struct dummy32_t {
 		uint8_t a = 10;
 		uint8_t b = 11;
 		uint8_t c = 12;
 		uint8_t d = 13;
 	};
 	REQUIRE(
-		peo::pretty_string(dummy_t{}) ==
+		peo::pretty_string(dummy32_t{}) ==
 		"unknown 0x0a0b0c0d"
+	);
+	struct dummy64_t {
+		uint8_t a = 10;
+		uint8_t b = 11;
+		uint8_t c = 12;
+		uint8_t d = 13;
+		uint8_t e = 10;
+		uint8_t f = 11;
+		uint8_t g = 12;
+		uint8_t h = 13;
+	};
+	REQUIRE(
+		peo::pretty_string(dummy64_t{}) ==
+		"unknown 0x0a0b0c0d0a0b0c0d"
 	);
 };
 
 
-TEST_CASE("detail::uint8_to_hexstring") {
+TEST_CASE("detail::uint8_to_hexchars") {
 	auto to_hex_via_sstr_f = [](const int value) {
 		auto sstr = std::stringstream{};
 		sstr << std::hex << value;
@@ -680,24 +694,31 @@ TEST_CASE("detail::uint8_to_hexstring") {
 			"0" + str :
 			str;
 	};
-
+	using hexchars_t = peo::detail::hexchars_t;
+	auto to_str = [](const hexchars_t& hexchars) {
+		return std::string{ hexchars.front(), hexchars.back() };
+	};
+	auto to_hexchars = [](const std::string& str) -> hexchars_t {
+		PRECOOKED_ASSERT(str.size() == 2);
+		return hexchars_t{ str.front(), str.back()};
+	};
 	for (int v = 0; v < 256; ++v) {
 		REQUIRE(
 			to_hex_via_sstr_f(v) ==
-			peo::detail::uint8_to_hexstring(static_cast<uint8_t>(v))
+			to_str(peo::detail::uint8_to_hexchars(static_cast<uint8_t>(v)))
 		);
 	}
 	REQUIRE(
-		peo::detail::uint8_to_hexstring(0) == "00"
+		peo::detail::uint8_to_hexchars(0) == to_hexchars("00")
 	);
 	REQUIRE(
-		peo::detail::uint8_to_hexstring(1) == "01"
+		peo::detail::uint8_to_hexchars(1) == to_hexchars("01")
 	);
 	REQUIRE(
-		peo::detail::uint8_to_hexstring(255) == "ff"
+		peo::detail::uint8_to_hexchars(255) == to_hexchars("ff")
 	);
 	REQUIRE(
-		peo::detail::uint8_to_hexstring(254) == "fe"
+		peo::detail::uint8_to_hexchars(254) == to_hexchars("fe")
 	);
 
 }
@@ -727,6 +748,9 @@ TEST_CASE("held_type_name"){
 TEST_CASE("safe_cast") {
 	REQUIRE_THROWS(
 		peo::safe_cast<uint8_t>(-1)
+	);
+	REQUIRE_THROWS(
+		peo::safe_cast<uint8_t>(500)
 	);
 	REQUIRE(
 		peo::safe_cast<uint8_t>(1) == 1
@@ -830,15 +854,27 @@ TEST_CASE("make_args") {
 ////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////
 
-#include "../include/precooked_excluded.hpp"
+#include "../include/precooked_experimental.hpp"
 
 TEST_CASE("vector_to_string") {
 	namespace fs = std::filesystem;
-	auto tmpdir = fs::temp_directory_path();
-	auto tmpfile_path = tmpdir / "test.txt";
-	auto data = peo::read_file_to_vector<char>(tmpfile_path);
-	peo::write_vector_to_file(data, tmpfile_path);
-	REQUIRE(peo::is_vector_equal_to_file_content(data, tmpfile_path));
+	const auto filename0 = fs::path("testtest0.txt");
+	const auto filename1 = fs::path("testtest1.txt");
+	const auto tmpdir = fs::temp_directory_path();
+	const auto tmpfile_path0 = tmpdir / filename0;
+	const auto tmpfile_path1 = tmpdir / filename1;
+	const auto src_data0 = std::vector<int32_t>{ 1, 3, 5, 7, 9, 11, 13, 15, 17, 19 };
+	const auto src_data1 = std::vector<int32_t>{ 1, 3, 5, 7, 9, 11, 13, 15, 17, 20 };
+	const auto bv0 = peo::detail::byte_view{ src_data0 };
+	const auto bv1 = peo::detail::byte_view{ src_data1 };
+	REQUIRE(bv0.size() == bv1.size());
+	peo::write_vector_to_file(src_data0, tmpfile_path0);
+	peo::write_vector_to_file(src_data1, tmpfile_path1);
+	REQUIRE(peo::is_vector_equal_to_file_content(src_data0, tmpfile_path0));
+	REQUIRE(peo::is_vector_equal_to_file_content(src_data1, tmpfile_path1));
+
+	REQUIRE(!peo::is_vector_equal_to_file_content(src_data1, tmpfile_path0));
+	REQUIRE(!peo::is_vector_equal_to_file_content(src_data0, tmpfile_path1));
 }
 
 
