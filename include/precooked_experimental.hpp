@@ -4,8 +4,76 @@ namespace peo {
 
 [[nodiscard]] inline auto is_vector_equal_to_file_content(const detail::byte_view& bytevector, const std::filesystem::path& filepath) -> bool;
 [[nodiscard]] inline auto is_string_equal_to_file_content(std::string_view str, const std::filesystem::path& filepath) -> bool;
-
+template <typename Str0, typename Str1> [[nodiscard]] auto count_occurances(const Str0& haystack, const Str1& needle) noexcept -> size_t;
+template <typename Str0, typename Str1> [[nodiscard]] auto count_occurances_ignore_case(const Str0& haystack, const Str1& needle, const std::locale& loc = std::locale{}) noexcept -> size_t;
 }
+
+
+namespace peo {
+template <typename Str0, typename Str1>
+[[nodiscard]] auto count_occurances(
+	const Str0& haystack,
+	const Str1& needle
+) noexcept -> size_t {
+	using Char = peo::type_traits::underlying_char_t<Str0>;
+	const auto haystack_sv = std::basic_string_view<Char>{ haystack };
+	const auto needle_sv = std::basic_string_view<Char>{ needle };
+	if (
+		haystack_sv.size() < needle_sv.size() ||
+		needle_sv.empty()
+	) {
+		return 0;
+	}
+	return detail::impl_count_occurances(
+		haystack_sv,
+		needle_sv,
+		size_t{ 0 },
+		[](const auto& haystack, const auto& needle, const size_t offset) {
+			return haystack.find(needle, offset);
+		}
+	);
+}
+template <typename Str0, typename Str1>
+[[nodiscard]] auto count_occurances_ignore_case(
+	const Str0& haystack,
+	const Str1& needle,
+	const std::locale& loc
+) noexcept -> size_t {
+	using Char = peo::type_traits::underlying_char_t<Str0>;
+	const auto haystack_sv = std::basic_string_view<Char>{ haystack };
+	const auto needle_sv = std::basic_string_view<Char>{ needle };
+	if (
+		haystack_sv.size() < needle_sv.size() ||
+		needle_sv.empty()
+	) {
+		return 0;
+	}
+	return detail::impl_count_occurances(
+		haystack_sv,
+		needle_sv,
+		size_t{ 0 },
+		[&loc](const auto& haystack, const auto& needle, const size_t offset) {
+			return peo::find_ignore_case(haystack, needle, offset, loc);
+		}
+	);
+}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
