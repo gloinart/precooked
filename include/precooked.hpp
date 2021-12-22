@@ -47,13 +47,13 @@ template <typename Char, typename Str0, typename Str1> [[nodiscard]] auto replac
 template <typename Str0, typename Str1, typename Str2> [[nodiscard]] auto replace_all_ignore_case(const Str0& haystack, const Str1& needle, const Str2& replacement, const std::locale& loc = std::locale{}) -> std::basic_string<type_traits::underlying_char_t<Str0>>;
 
 // String - trim
-template <typename Str0>                [[nodiscard]] auto is_trimmed(const Str0& str) noexcept -> bool;
+template <typename Str0>                [[nodiscard]] auto is_trimmed(const Str0& str, const std::locale& loc = std::locale{}) noexcept -> bool;
 template <typename Str0, typename Str1> [[nodiscard]] auto is_trimmed(const Str0& str, const Str1& trim_chars) noexcept -> bool;
-template <typename Char>                [[nodiscard]] auto trim_string(std::basic_string<Char> str) noexcept -> std::basic_string<Char>;
+template <typename Char>                [[nodiscard]] auto trim_string(std::basic_string<Char> str, const std::locale& loc = std::locale{}) noexcept -> std::basic_string<Char>;
 template <typename Char, typename Str0> [[nodiscard]] auto trim_string(std::basic_string<Char> str, const Str0& trim_chars) noexcept -> std::basic_string<Char>;
-template <typename Str0>                [[nodiscard]] auto trim_string_to_view(const Str0& str) noexcept -> std::basic_string_view<type_traits::underlying_char_t<Str0>>;
+template <typename Str0>                [[nodiscard]] auto trim_string_to_view(const Str0& str, const std::locale& loc = std::locale{}) noexcept -> std::basic_string_view<type_traits::underlying_char_t<Str0>>;
 template <typename Str0, typename Str1> [[nodiscard]] auto trim_string_to_view(const Str0& str, const Str1& trim_chars) noexcept -> std::basic_string_view<type_traits::underlying_char_t<Str0>>;
-template <typename Char>                [[nodiscard]] auto trim_string_to_view(std::basic_string<Char>&& str) noexcept -> std::basic_string_view<Char> = delete; // Prevent dangling std::string_view
+template <typename Char>                [[nodiscard]] auto trim_string_to_view(std::basic_string<Char>&& str, const std::locale& loc = std::locale{}) noexcept -> std::basic_string_view<Char> = delete; // Prevent dangling std::string_view
 template <typename Char, typename Str0> [[nodiscard]] auto trim_string_to_view(std::basic_string<Char>&& str, const Str0& trim_chars) noexcept -> std::basic_string_view<Char> = delete; // Prevent dangling std::string_view
 
 // String - join
@@ -77,7 +77,7 @@ template <typename StrView> [[nodiscard]] auto to_upper(const StrView& str, cons
 
 // String to number conversion
 template <typename T> [[nodiscard]] auto string_to_number(std::string_view str) noexcept -> std::optional<T>;
-template <typename T> [[nodiscard]] auto number_to_string(const T& number) -> std::string; // Just here for consistency, simply uses std::to_string(...) underneath
+template <typename Char = char, typename T> [[nodiscard]] auto number_to_string(const T& number) -> std::basic_string<Char>;
 
 // Scan filesystem
 [[nodiscard]] inline auto list_files_in_directory(const std::filesystem::path& dir) -> std::vector<std::filesystem::path>;
@@ -149,11 +149,13 @@ template <typename T> [[nodiscard]] auto held_type_name(const T& value) -> std::
 	#define PRECOOKED_LIKELY
 #endif
 
-
+// Note that PRECOOKED_ASSERT is only utilized internally and is never triggered
 #ifndef PRECOOKED_ASSERT
 	#ifdef NDEBUG
+		// Evaluate expression
 		#define PRECOOKED_ASSERT(x) for(;false;) { [[maybe_unused]] auto result = (x); }
 	#else
+		// Utilize cassert
 		#include <cassert>
 		#define PRECOOKED_ASSERT(x) assert(x)
 	#endif
@@ -534,10 +536,19 @@ auto peo::string_to_number(const std::string_view str) noexcept -> std::optional
 	return success ? value : std::optional<T>{};
 }
 
-template <typename T> 
-auto peo::number_to_string(const T& number) -> std::string {
+template <typename Char, typename T> 
+auto peo::number_to_string(const T& number) -> std::basic_string<Char> {
 	static_assert(std::is_arithmetic_v<T>, "T needs to be an arithmetic type");
-	return std::to_string(number);
+	if constexpr (std::is_same_v<Char, char>) {
+		return std::to_string(number);
+	}
+	else if constexpr (std::is_same_v<Char, wchar_t>) {
+		return std::to_wstring(number);
+	}
+	else {
+		auto stru8 = std::to_string(number);
+		return std::basic_string<Char>(stru8.begin(), stru8.end());
+	}
 }
 
 
@@ -728,17 +739,18 @@ template <typename Strings, typename Char>
 	const Strings& strings, 
 	const std::basic_string_view<Char>& delimiter
 ) -> std::basic_string<Char> {
-	if (strings.empty()) {
+	if (strings.empty()) PRECOOKED_UNLIKELY {
 		return {};
 	}
 	const auto target_size_of_strings = std::accumulate(
 		strings.begin(), 
 		strings.end(), 
 		size_t{ 0 }, 
-		[](const size_t sum, const auto& str) {
+		[](const size_t sum, const auto& str) noexcept -> size_t {
 			return sum + str.size();
 		}
 	);
+	PRECOOKED_ASSERT(!strings.empty());
 	const auto num_delimiters = strings.size() - 1;
 	const auto target_size_of_delimiters = num_delimiters * delimiter.size();
 	const auto target_size = target_size_of_strings + target_size_of_delimiters;
@@ -746,12 +758,19 @@ template <typename Strings, typename Char>
 	auto joined = std::basic_string<Char>{};
 	joined.reserve(target_size);
 	if (delimiter.empty()) {
+		// No delimiter
 		for (auto&& str : strings) {
 			joined.append(str);
 		}
 	}
 	else {
-		for (auto it = strings.begin(), it_end = std::prev(strings.end()); it != it_end; ++it) {
+		PRECOOKED_ASSERT(!strings.empty());
+		// Intersperse delimiter
+		for (
+			auto it = strings.begin(), it_end = std::prev(strings.end()); 
+			it != it_end; 
+			++it
+		) {
 			joined.append(*it);
 			joined.append(delimiter);
 		}
@@ -861,6 +880,7 @@ auto peo::join_strings(const Strings& strings) -> std::basic_string<Char> {
 
 
 namespace peo::detail {
+#if 0
 template <typename Char>
 [[nodiscard]] constexpr auto default_trim_chars() noexcept -> std::basic_string_view<Char> {
 	using namespace std::string_view_literals;
@@ -875,6 +895,7 @@ template <typename Char>
 	else if constexpr (std::is_same_v<Char, char16_t>) { return u"\t\r\n "sv; }
 	else if constexpr (std::is_same_v<Char, char32_t>) { return U"\t\r\n "sv; }
 }
+#endif
 template <typename Char>
 [[nodiscard]] constexpr auto linebreak_chars() noexcept -> std::basic_string_view<Char> {
 	using namespace std::string_view_literals;
@@ -948,9 +969,8 @@ template <typename Char, typename PartType>
 		right = right == npos ? str.size() : right;
 		PRECOOKED_ASSERT(right <= str.size());
 		PRECOOKED_ASSERT(left <= right);
-		const auto* part_offset = str.data() + left;
 		const auto part_size = right - left;
-		parts.emplace_back(PartType{ part_offset, part_size });
+		parts.emplace_back(str.substr(left, part_size));
 	}
 	PRECOOKED_ASSERT(parts.size() == num_parts);
 	return parts;
@@ -964,7 +984,8 @@ auto peo::split_string(
 	const Str1& delimiters
 ) -> std::vector<std::basic_string<type_traits::underlying_char_t<Str0>>> {
 	using Char = type_traits::underlying_char_t<Str0>;
-	return detail::impl_split_string<Char, std::basic_string<Char>>(str, delimiters);
+	using PartType = std::basic_string<Char>;
+	return detail::impl_split_string<Char, PartType>(str, delimiters);
 }
 
 template <typename Str0, typename Str1>
@@ -974,7 +995,8 @@ auto peo::split_string_to_views(
 ) -> std::vector<std::basic_string_view<type_traits::underlying_char_t<Str0>>> {
 	using Char = type_traits::underlying_char_t<Str0>;
 	static_assert(type_traits::is_valid_char_v<Char>);
-	return detail::impl_split_string<Char, std::basic_string_view<Char>>(str, delimiters);
+	using PartType = std::basic_string_view<Char>;
+	return detail::impl_split_string<Char, PartType>(str, delimiters);
 }
 
 template <typename Str>
@@ -997,9 +1019,73 @@ auto peo::split_string_to_lines(
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
 
+#include <locale>
 
 
+namespace peo::detail {
+template <typename Char, typename IsTrimChar>
+[[nodiscard]] auto impl_is_trimmed(
+	const std::basic_string_view<Char>& str, 
+	const IsTrimChar& is_trim_char_f
+) noexcept -> bool {
+	return
+		str.empty() ? true :
+		is_trim_char_f(str.front()) ? false :
+		is_trim_char_f(str.back()) ? false :
+		true;
+}
 
+class idxrange_t {
+public:
+	constexpr idxrange_t() noexcept = default;
+	constexpr idxrange_t(size_t offset, size_t count) noexcept
+	: offset_{ offset }
+	, count_{ count }
+	{}
+	[[nodiscard]] constexpr auto offset() const noexcept { return offset_; }
+	[[nodiscard]] constexpr auto count() const noexcept { return count_; }
+	[[nodiscard]] constexpr auto end_idx() const noexcept { return offset_ + count_; }
+private:
+	size_t offset_{0};
+	size_t count_{0};
+};
+
+template <typename Char, typename IsTrimChar>
+[[nodiscard]] auto impl_find_trimmed_range(
+	const std::basic_string_view<Char>& sv,
+	const IsTrimChar& is_trim_char_f
+) noexcept -> idxrange_t {
+	const auto is_valid_char_f = [&](auto&& c) noexcept {
+		return !is_trim_char_f(c);
+	};
+	const auto first_valid_it = std::find_if(
+		sv.begin(),
+		sv.end(),
+		is_valid_char_f
+	);
+	if (
+		const auto empty_is_result = first_valid_it == sv.end();
+		empty_is_result
+	) {
+		return {};
+	}
+	const auto one_after_last_valid_it = std::find_if(
+		sv.rbegin(),
+		std::make_reverse_iterator(first_valid_it),
+		is_valid_char_f
+	).base();
+	PRECOOKED_ASSERT(first_valid_it <= one_after_last_valid_it);
+	const auto offset = static_cast<size_t>(std::distance(sv.begin(), first_valid_it));
+	const auto count = static_cast<size_t>(std::distance(
+		first_valid_it, 
+		one_after_last_valid_it)
+	);
+	PRECOOKED_ASSERT(offset <= sv.size());
+	PRECOOKED_ASSERT((offset + count) <= sv.size());
+	return { offset, count};
+};
+
+}
 
 
 
@@ -1007,9 +1093,20 @@ auto peo::split_string_to_lines(
 
 template <typename Char>
 auto peo::trim_string(
-	std::basic_string<Char> str
+	std::basic_string<Char> str,
+	const std::locale& loc
 ) noexcept -> std::basic_string<Char> {
-	return trim_string(std::move(str), detail::default_trim_chars<Char>());
+	const auto is_trim_char_f = [&loc](const Char& c) noexcept {
+		return std::isspace(c, loc);
+	};
+	const auto range = detail::impl_find_trimmed_range(
+		std::basic_string_view<Char>{str},
+		is_trim_char_f
+	);
+	PRECOOKED_ASSERT(range.end_idx() <= str.size());
+	str.resize(range.end_idx());
+	str.erase(str.begin(), str.begin() + range.offset());
+	return str;
 }
 
 template <typename Char, typename Str0>
@@ -1018,28 +1115,36 @@ auto peo::trim_string(
 	const Str0& trim_chars
 ) noexcept -> std::basic_string<Char> {
 	const auto trim_chars_sv = std::basic_string_view<Char>{ trim_chars };
-	constexpr auto npos = std::basic_string_view<Char>::npos;
-	if (str.empty() || trim_chars_sv.empty()) {
-		return str;
-	}
-	const auto last_idx = str.find_last_not_of(trim_chars_sv);
-	if (last_idx != npos) {
-		str.erase(str.begin() + last_idx + 1, str.end());
-	}
-	const auto first_idx = str.find_first_not_of(trim_chars_sv);
-	if (first_idx != npos && first_idx != 0) {
-		str.erase(str.begin(), str.begin() + first_idx);
-	}
+	const auto is_trim_char_f = [&trim_chars_sv](const Char& c) noexcept {
+		constexpr auto npos = std::basic_string_view<Char>::npos;
+		return trim_chars_sv.find(c) != npos;
+	};
+	const auto range = detail::impl_find_trimmed_range(
+		std::basic_string_view<Char>{str}, 
+		is_trim_char_f
+	);
+	PRECOOKED_ASSERT(range.end_idx() <= str.size());
+	str.resize(range.end_idx());
+	str.erase(str.begin(), str.begin() + range.offset());
 	return str;
 }
 
 template <typename Str0>
 auto peo::trim_string_to_view(
-	const Str0& str
+	const Str0& str,
+	const std::locale& loc
 ) noexcept -> std::basic_string_view<type_traits::underlying_char_t<Str0>> {
 	using Char = type_traits::underlying_char_t<Str0>;
 	static_assert(type_traits::is_valid_char_v<Char>);
-	return trim_string_to_view(str, detail::default_trim_chars<Char>());
+	const auto is_trim_char_f = [&loc](const Char& c) noexcept {
+		return std::isspace(c, loc);
+	};
+	const auto sv = std::basic_string_view<Char>{ str };
+	const auto range = detail::impl_find_trimmed_range(
+		sv,
+		is_trim_char_f
+	);
+	return sv.substr(range.offset(), range.count());
 }
 
  template <typename Str0, typename Str1>
@@ -1049,34 +1154,44 @@ auto peo::trim_string_to_view(
 ) noexcept -> std::basic_string_view<type_traits::underlying_char_t<Str0>> {
 	using Char = type_traits::underlying_char_t<Str0>;
 	static_assert(type_traits::is_valid_char_v<Char>);
+	constexpr auto npos = std::basic_string_view<Char>::npos;
 	const auto trim_chars_sv = std::basic_string_view<Char>{ trim_chars };
-	auto sv = std::basic_string_view<Char>{ str };
-	if (sv.empty() || trim_chars_sv.empty()) {
-		return sv;
-	}
-	const auto first_idx = sv.find_first_not_of(trim_chars_sv);
-	if (first_idx != std::string_view::npos) {
-		sv = sv.substr(first_idx);
-	}
-	const auto last_idx = sv.find_last_not_of(trim_chars_sv);
-	if (last_idx != std::string_view::npos) {
-		sv = sv.substr(0, last_idx + 1);
-	}
-	return sv;
+	const auto is_trim_char_f = [&trim_chars_sv](const Char& c) noexcept {
+		constexpr auto npos = std::basic_string_view<Char>::npos;
+		return trim_chars_sv.find(c) != npos;
+	};
+	const auto sv = std::basic_string_view<Char>{ str };
+	const auto range = detail::impl_find_trimmed_range(
+		sv,
+		is_trim_char_f
+	);
+	return sv.substr(range.offset(), range.count());
 }
 
 
 
 template<typename Str0>
-auto peo::is_trimmed(const Str0& str) noexcept -> bool {
+auto peo::is_trimmed(
+	const Str0& str,
+	const std::locale& loc
+) noexcept -> bool {
 	using Char = type_traits::underlying_char_t<Str0>;
 	static_assert(type_traits::is_valid_char_v<Char>);
 	const auto sv = std::basic_string_view<Char>{ str };
-	return is_trimmed(str, detail::default_trim_chars<Char>());
+	const auto is_trim_char_f = [&loc](const Char& c) noexcept {
+		return std::isspace(c, loc);
+	};
+	return detail::impl_is_trimmed(
+		sv,
+		is_trim_char_f
+	);
 }
 
 template<typename Str0, typename Str1>
-auto peo::is_trimmed(const Str0& str, const Str1& trim_chars) noexcept -> bool {
+auto peo::is_trimmed(
+	const Str0& str, 
+	const Str1& trim_chars
+) noexcept -> bool {
 	using Char = type_traits::underlying_char_t<Str0>;
 	static_assert(type_traits::is_valid_char_v<Char>);
 	const auto sv = std::basic_string_view<Char>{ str };
@@ -1084,11 +1199,10 @@ auto peo::is_trimmed(const Str0& str, const Str1& trim_chars) noexcept -> bool {
 		constexpr auto npos = std::basic_string_view<Char>::npos;
 		return trim_chars.find(candidate) != npos;
 	};
-	return
-		sv.empty() ? true :
-		is_trim_char_f(sv.front()) ? false :
-		is_trim_char_f(sv.back()) ? false :
-		true;
+	return detail::impl_is_trimmed(
+		sv,
+		is_trim_char_f
+	);
 }
 
 
@@ -1128,7 +1242,12 @@ template <typename Char>
 	) noexcept {
 		return a == b || std::tolower(a, loc) == std::tolower(b, loc);
 	};
-	return std::equal(a.begin(), a.end(), b.begin(), is_chars_equal_ignore_case_f);
+	return std::equal(
+		a.begin(), 
+		a.end(), 
+		b.begin(),
+		is_chars_equal_ignore_case_f
+	);
 }
 
 
@@ -1144,13 +1263,13 @@ template <typename Char>
 	PRECOOKED_ASSERT(!needle.empty());
 	constexpr auto npos = std::basic_string_view<Char>::npos;
 	const auto i_end = (1 + haystack.size()) - needle.size(); // No need to search beyond this index
-	if (offset > i_end) {
-		return npos;
-	}
+	//if (offset > i_end) {
+	//	return npos;
+	//}
 	const auto equals_needle_front_f = [
 		upper = std::toupper(needle.front(), loc),
 		lower = std::tolower(needle.front(), loc)
-	](const Char& c) {
+	](const Char& c) noexcept {
 		return c == upper || c == lower;
 	};
 	const auto needle_tail = needle.substr(1);
@@ -1180,9 +1299,33 @@ template <typename Char>
 
 namespace peo::detail {
 
+// Does not count overlapping occurances,
+// ie impl_count_occurances("aaa", "aa") == 1
+template <typename Char, typename FindFunc>
+[[nodiscard]] auto impl_count_occurances(
+	const std::basic_string_view<Char>& haystack,
+	const std::basic_string_view<Char>& needle,
+	const size_t start_offset,
+	const FindFunc& find_func
+) noexcept -> size_t {
+	PRECOOKED_ASSERT(needle.size() <= haystack.size());
+	PRECOOKED_ASSERT(!needle.empty());
+	auto num_occurances = size_t{ 0 };
+	const auto i_start = find_func(haystack, needle, start_offset);
+	const auto i_end = (haystack.size() + 1) - needle.size();
+	for (
+		auto i = i_start;
+		i < i_end;
+		i = find_func(haystack, needle, i + needle.size())
+	) {
+		++num_occurances;
+	}
+	return num_occurances;
+}
+
 
 template <typename Char>
-auto replace_string_part(
+auto replace_string_part_inplace(
 	std::basic_string<Char>& io_string, 
 	const size_t offset,
 	const std::basic_string_view<Char>& new_content
@@ -1193,13 +1336,15 @@ auto replace_string_part(
 
 
 // This function replaces string of equal size
+// - It does not allocate
+// - Requires replacement size to be equal needle size.
 template <typename Char, typename FindFunc>
 [[nodiscard]] auto impl_replace_all_equal_needle_length(
 	std::basic_string<Char> haystack, 
 	const std::basic_string_view<Char> needle,
 	const std::basic_string_view<Char> replacement,
 	const FindFunc& find_func
-) noexcept -> std::string {
+) noexcept -> std::basic_string<Char> {
 	PRECOOKED_ASSERT(needle.size() == replacement.size());
 	constexpr auto npos = std::basic_string_view<Char>::npos;
 	for (
@@ -1207,14 +1352,15 @@ template <typename Char, typename FindFunc>
 		idx != npos;
 		idx = find_func(haystack, needle, idx + needle.size())
 	) {
-		replace_string_part(haystack, idx, replacement);
+		replace_string_part_inplace(haystack, idx, replacement);
 	}
 	return haystack;
 }
 
 
-// This function modifies the string in-place.
-// Requires replacement to be smaller than needle.
+// Modifies the string in-place.
+// - It does not allocate.
+// - Requires replacement to be smaller than needle.
 template <typename Char, typename FindFunc>
 [[nodiscard]] auto impl_replace_all_shrink_string(
 	std::basic_string<Char> haystack,
@@ -1229,11 +1375,14 @@ template <typename Char, typename FindFunc>
 	if (first_needle == npos) {
 		return haystack;
 	}
-	replace_string_part(haystack, first_needle, replacement);
+	replace_string_part_inplace(haystack, first_needle, replacement);
 	auto write_pos = first_needle + replacement.size();
 	for (auto read_pos = first_needle + needle.size();;) {
 		PRECOOKED_ASSERT(write_pos < read_pos);
-		const auto needle_pos = std::min(find_func(haystack, needle, read_pos), haystack.size());
+		const auto needle_pos = std::min(
+			find_func(haystack, needle, read_pos), 
+			haystack.size()
+		);
 		while (read_pos < needle_pos) {
 			PRECOOKED_ASSERT(write_pos < haystack.size());
 			PRECOOKED_ASSERT(read_pos < haystack.size());
@@ -1245,7 +1394,7 @@ template <typename Char, typename FindFunc>
 		if (needle_pos == haystack.size()) {
 			break;
 		}
-		replace_string_part(haystack, write_pos, replacement);
+		replace_string_part_inplace(haystack, write_pos, replacement);
 		read_pos += needle.size();
 		write_pos += replacement.size();
 	}
@@ -1255,29 +1404,10 @@ template <typename Char, typename FindFunc>
 }
 
 
-template <typename Char, typename FindFunc>
-[[nodiscard]] auto calculate_num_occurances(
-	const std::basic_string_view<Char>& haystack,
-	const std::basic_string_view<Char>& needle,
-	const size_t start_offset,
-	const FindFunc& find_func
-) noexcept -> size_t {
-	PRECOOKED_ASSERT(needle.size() <= haystack.size());
-	auto num_occurances = size_t{ 0 };
-	const auto i_start = find_func(haystack, needle, start_offset);
-	const auto i_end = haystack.size();
-	for (
-		auto i = i_start;
-		i < i_end;
-		i = find_func(haystack, needle, i + needle.size())
-	) {
-		++num_occurances;
-	}
-	return num_occurances;
-}
 
 // This function builds a new string.
-// Required if replacement is larger than needle, or the source is a string_view.
+// - Required if replacement is larger than needle, or the source is a string_view.
+// - It makes at most one allocation.
 template <typename Char, typename FindFunc>
 [[nodiscard]] auto impl_replace_all_rebuild_string(
 	const std::basic_string_view<Char>& haystack,
@@ -1288,11 +1418,11 @@ template <typename Char, typename FindFunc>
 	PRECOOKED_ASSERT(!needle.empty());
 	PRECOOKED_ASSERT(needle.size() <= haystack.size());
 	const auto first_match = std::min(find_func(haystack, needle, 0), haystack.size());
-	if (first_match >= haystack.size()) {
+	if (first_match >= haystack.size()) PRECOOKED_UNLIKELY {
 		return std::basic_string<Char>{ haystack };
 	}
 	const auto lazy_num_occurances_f = [&]() noexcept {
-		const auto num_occurances = calculate_num_occurances(
+		const auto num_occurances = impl_count_occurances(
 			haystack,
 			needle,
 			first_match + needle.size(),
@@ -1382,7 +1512,7 @@ auto peo::replace_all_ignore_case(
 	const auto haystack_sv = std::basic_string_view<Char>{ haystack };
 	const auto needle_sv = std::basic_string_view<Char>{ needle };
 	const auto replacement_sv = std::basic_string_view<Char>{ replacement };
-	const auto& find_func = [&loc](const auto& haystack, const auto& needle, size_t offset) {
+	const auto& find_func = [&loc](const auto& haystack, const auto& needle, size_t offset) noexcept {
 		return detail::impl_find_ignore_case<Char>(haystack, needle, offset, loc);
 	};
 	const auto no_replacement_possible = 
@@ -1407,10 +1537,9 @@ auto peo::replace_all_ignore_case(
 	const auto haystack_sv = std::basic_string_view<Char>{ haystack };
 	const auto needle_sv = std::basic_string_view<Char>{ needle };
 	const auto replacement_sv = std::basic_string_view<Char>{ replacement };
-	const auto& find_func = [&loc](const auto& haystack, const auto& needle, size_t offset) {
+	const auto& find_func = [&loc](const auto& haystack, const auto& needle, size_t offset) noexcept {
 		return detail::impl_find_ignore_case<Char>(haystack, needle, offset, loc);
 	};
-
 	const auto no_replacement_possible =
 		needle_sv.empty() || 
 		needle_sv.size() > haystack_sv.size();
@@ -1459,8 +1588,8 @@ auto peo::to_lower(
 	static_assert(type_traits::is_valid_char_v<Char>);
 	const auto sv = std::basic_string_view<Char>{strview};
 	auto str = std::basic_string<Char>{};
-	str.reserve(sv.size());
-	std::transform(sv.begin(), sv.end(), std::back_inserter(str), [&loc](const Char& c) {
+	str.resize(sv.size());
+	std::transform(sv.begin(), sv.end(), str.begin(), [&loc](const Char& c) {
 		return std::tolower(c, loc);
 	});
 	return str;
@@ -1487,10 +1616,15 @@ auto peo::to_upper(
 	static_assert(type_traits::is_valid_char_v<Char>);
 	const auto sv = std::basic_string_view<Char>{ strview };
 	auto str = std::basic_string<Char>{};
-	str.reserve(sv.size());
-	std::transform(sv.begin(), sv.end(), std::back_inserter(str), [&loc](const Char& c) {
-		return std::toupper(c, loc);
-	});
+	str.resize(sv.size());
+	std::transform(
+		sv.begin(), 
+		sv.end(), 
+		str.begin(), 
+		[&loc](const Char& c) {
+			return std::toupper(c, loc);
+		}
+	);
 	return str;
 }
 
@@ -1521,7 +1655,8 @@ auto peo::contains_substring(
 template <typename Str0, typename Str1>
 auto peo::contains_substring_ignore_case(
 	const Str0& haystack, 
-	const Str1& needle, const std::locale& loc
+	const Str1& needle, 
+	const std::locale& loc
 ) noexcept -> bool {
 	return find_ignore_case(haystack, needle, 0, loc) != std::string::npos;
 }
@@ -1624,7 +1759,7 @@ template <typename Container>
 	data.resize(num_elements);
 	auto file_stream = std::ifstream{ filepath, std::ios::binary };
 	if (!file_stream.is_open()) {
-		throw peo::exceptions::read_file_exception(filepath);
+		throw peo::exceptions::read_file_exception{ filepath };
 	}
 	const auto scope_exit = detail::scope_exit{ [&file_stream]() {
 		PRECOOKED_ASSERT(file_stream.is_open());
@@ -1634,7 +1769,7 @@ template <typename Container>
 	file_stream.seekg(0, std::ios_base::beg);
 	if (file_size > 0) {
 		auto* ptr_char = reinterpret_cast<byte_t*>(data.data());
-		file_stream.read(ptr_char, file_size);	
+		file_stream.read(ptr_char, file_size);
 	}
 	return data;
 }
@@ -1864,12 +1999,13 @@ auto peo::make_args(int argc, char* argv[]) -> std::vector<std::string> {
 		if (ptr == nullptr) {
 			continue;
 		}
-		auto str = std::string{ ptr };
-		str = trim_string(std::move(str));
-		if (str.empty()) {
+		const auto sv = trim_string_to_view(
+			std::string_view{ ptr }
+		);
+		if (sv.empty()) {
 			continue;
 		}
-		ret.emplace_back(str);
+		ret.emplace_back(sv);
 	}
 	PRECOOKED_ASSERT(
 		std::none_of(ret.begin(), ret.end(), [](auto&& str) { return str.empty(); })
